@@ -108,17 +108,17 @@ def get_profile(username: str, cursor: str | None = None, *, proxy: str | None =
         if side["profile_tile_section_type"] == "INTRO":
             for i in side["profile_tile_views"]["nodes"][1]["view_style_renderer"]["view"]["profile_tile_items"]["nodes"]:
                 item: dict[str, str | None] = {"text": None, "url": None, "type": None}
-
                 renderer: JSON = i["node"]["timeline_context_item"]["renderer"]
-                context_item_title: JSON | None = renderer["context_item"]["title"]
-                if context_item_title is None:
-                    continue
 
                 match renderer["__typename"]:
                     case "WhatsappNumberIntroCardItemRenderer":
                         item["text"] = renderer["wa_number"]
                         item["url"] = renderer["wa_link"]
                     case _:
+                        context_item_title: JSON | None = renderer["context_item"]["title"]
+                        if context_item_title is None:
+                            continue
+
                         item["text"] = context_item_title["text"]
                         if subtitle := renderer["context_item"].get("subtitle"):
                             item["text"] += f" {subtitle['text']}"
