@@ -32,7 +32,7 @@ def format_time(timestamp: str | float) -> str:
     if (since := int(seconds / 60 / 60)) < 24:
         return f"{since} hours ago"
     if seconds / 60 / 60 / 24 < 1:
-        return "Yestarday"
+        return "Yesterday"
     if (since := int(seconds / 60 / 60 / 24)) < 7:
         return f"{since} days ago"
     if (since := int(seconds / 60 / 60 / 24 / 7)) < 4:

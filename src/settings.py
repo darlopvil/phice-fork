@@ -31,7 +31,7 @@ class UserSettings(ConfigBase):
                 v = True
             elif v in ("off", "false"):
                 v = False
-            elif isinstance(v, str) and v.isdigit():
+            elif isinstance(v, str) and v.removeprefix("-").isdigit():
                 v = int(v)
 
             if v is not Undefined:
