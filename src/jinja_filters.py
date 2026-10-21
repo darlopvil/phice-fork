@@ -1,22 +1,26 @@
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 from urllib.parse import ParseResult, urlparse
 
 from flask import url_for
 
 from .flask_utils import get_user_settings
 
+FBCDN_URL: re.Pattern[str] = re.compile(r"https?://[^/]*\.fbcdn\.net/[^ ]*")
 
-def _proxy_sub(m: re.Match[str]) -> str:
+
+def _proxy_sub(m: re.Match[str], *, external: bool) -> str:
     url: ParseResult = urlparse(m.group(0))
 
-    return f"{url_for('cdn.cdn', host=url.hostname, path=url.path[1:], _external=True)}?{url.query}"
+    return f"{url_for('cdn.cdn', host=url.hostname, path=url.path[1:], _external=external)}?{url.query}"
 
 
-def proxy(s: str) -> str:
+def proxy(s: str, *, external: bool = False) -> str:
+    """Route fbcdn URLs through this instance. Pages use relative URLs; feeds need absolute ones."""
     if get_user_settings().proxy:
-        return re.sub(r"https?://[^/]*.fbcdn.net/[^ ]*", _proxy_sub, s)
+        return FBCDN_URL.sub(partial(_proxy_sub, external=external), s)
     return s
 
 

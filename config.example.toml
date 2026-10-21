@@ -1,6 +1,9 @@
 [phice]
 enable_rss = true
 proxy = ""
+# Number of reverse proxies in front of Phice whose X-Forwarded-For/X-Forwarded-Proto
+# headers are trusted. 0 = none (Phice is reached directly).
+trusted_proxies = 0
 
 [default_user_settings]
 theme = "default"

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .jinja_filters import FILTERS
 from .jinja_globals import GLOBALS
@@ -20,6 +21,10 @@ def create_app(config_file: Path | None) -> Flask:
 
     app.config["phice"] = PhiceConfig(**custom_config.get("phice", {}))
     app.config["user_settings"] = UserSettings(**custom_config.get("default_user_settings", {}))
+    if (trusted_proxies := app.config["phice"].trusted_proxies) > 0:
+        # Only the scheme and client address are taken from the proxy: X-Forwarded-Host is
+        # often passed through from the client unchanged, so the Host header is used as-is.
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_proxies, x_proto=trusted_proxies)
     app.url_map.strict_slashes = False
     app.jinja_options["autoescape"] = True
     app.jinja_env.policies["urlize.rel"] = "noreferrer nofollow"

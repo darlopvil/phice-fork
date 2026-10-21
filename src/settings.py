@@ -78,3 +78,8 @@ class UserSettings(ConfigBase):
 class PhiceConfig(ConfigBase):
     enable_rss: bool = True
     proxy: str | None = None
+    trusted_proxies: int = 0
+
+    def __post_init__(self) -> None:
+        if self.trusted_proxies < 0:
+            raise ValueError(f"Invalid phice.trusted_proxies: {self.trusted_proxies!r}")

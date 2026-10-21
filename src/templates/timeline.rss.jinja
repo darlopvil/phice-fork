@@ -6,7 +6,7 @@
         <description>RSS feed for {{ feed.name }}</description>
         {% if feed.picture_url -%}
             <image>
-                <url>{{ feed.picture_url | proxy }}</url>
+                <url>{{ feed.picture_url | proxy(external=true) }}</url>
                 <title></title>
                 <link>{{
                     url_for(
@@ -39,19 +39,19 @@
                 )
             }}</link>
             {%- if t == "Video" or t == "AnimatedImage" %}
-            <enclosure url="{{ i.attachment.url | proxy }}" type="video/mp4" length="0" />
-            <media:content url="{{ i.attachment.url | proxy }}" type="video/mp4" medium="video" />
+            <enclosure url="{{ i.attachment.url | proxy(external=true) }}" type="video/mp4" length="0" />
+            <media:content url="{{ i.attachment.url | proxy(external=true) }}" type="video/mp4" medium="video" />
             {%- if t == "Video" and i.attachment.thumbnail_url %}
-            <media:thumbnail url="{{ i.attachment.thumbnail_url | proxy }}" />
+            <media:thumbnail url="{{ i.attachment.thumbnail_url | proxy(external=true) }}" />
             {%- endif %}
             {%- elif t == "AttachmentAlbum" %}
                 {%- set ns = namespace(enclosed=false) %}
                 {%- for j in i.attachment.items %}
                     {%- if not ns.enclosed and type(j) == "Video" %}
-            <enclosure url="{{ j.url | proxy }}" type="video/mp4" length="0" />
-            <media:content url="{{ j.url | proxy }}" type="video/mp4" medium="video" />
+            <enclosure url="{{ j.url | proxy(external=true) }}" type="video/mp4" length="0" />
+            <media:content url="{{ j.url | proxy(external=true) }}" type="video/mp4" medium="video" />
                         {%- if j.thumbnail_url %}
-            <media:thumbnail url="{{ j.thumbnail_url | proxy }}" />
+            <media:thumbnail url="{{ j.thumbnail_url | proxy(external=true) }}" />
                         {%- endif %}
                         {%- set ns.enclosed = true %}
                     {%- endif %}
@@ -61,16 +61,16 @@
                 {%- if i.attachment %}
                     <br />
                     {%- if t == "Photo" -%}
-                        <img src="{{ i.attachment.url | proxy }}" />
+                        <img src="{{ i.attachment.url | proxy(external=true) }}" />
                     {%- elif t == "Video" or t == "AnimatedImage"  -%}
-                        <video controls src="{{ i.attachment.url | proxy }}"><a href="{{ i.attachment.url | proxy }}">Video</a></video>
+                        <video controls src="{{ i.attachment.url | proxy(external=true) }}"><a href="{{ i.attachment.url | proxy(external=true) }}">Video</a></video>
                     {%- elif t == "AttachmentAlbum" -%}
                         {%- for j in i.attachment.items -%}
                             {%- set jt = type(j) -%}
                             {%- if jt == "Photo" -%}
-                                <img src="{{ j.url | proxy }}" />
+                                <img src="{{ j.url | proxy(external=true) }}" />
                             {%- elif jt == "Video" -%}
-                                <video controls src="{{ j.url | proxy }}"><a href="{{ j.url | proxy }}">Video</a></video>
+                                <video controls src="{{ j.url | proxy(external=true) }}"><a href="{{ j.url | proxy(external=true) }}">Video</a></video>
                             {%- endif -%}
                         {%- endfor -%}
                     {%- elif t == "Poll" -%}
