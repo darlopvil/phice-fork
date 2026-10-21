@@ -60,7 +60,7 @@
                 <span class="card centered">{{ icon("lock") }} The content is private.</span>
             {% elif feed.posts %}
                 {% for i in feed.posts %}
-                    {{ Post(i, expanded=request.cookies.get("expand") == "on") }}
+                    {{ Post(i, expanded=get_user_settings().expand) }}
                 {% endfor %}
                 {% if scroll.rate_limited %}
                     <span class="centered card">Couldn't fetch rest of posts rate-limited.</span>

@@ -5,6 +5,7 @@ from flask import url_for
 
 from .flask_utils import get_config, get_user_settings
 from .lib.datatypes import Post, PostType
+from .settings import THEMES
 
 
 def types(obj: object) -> str:
@@ -26,14 +27,6 @@ def post_url(p: Post) -> str:
 def juuid() -> str:
     return uuid.uuid1().hex
 
-
-THEMES: dict[str, str] = {
-    "default": "Default",
-    "light": "Light",
-    "black": "Black",
-    "catppuccin_mocha": "Catppuccin mocha",
-    "catppuccin_latte": "Catppuccin latte",
-}
 
 GLOBALS: dict[str, Any] = {
     "type": types,

@@ -1,9 +1,45 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any, NewType, get_type_hints, override
 
 from flask import has_request_context, request
 
 Undefined = NewType("Undefined", object)
+
+THEMES: dict[str, str] = {
+    "default": "Default",
+    "light": "Light",
+    "black": "Black",
+    "catppuccin_mocha": "Catppuccin mocha",
+    "catppuccin_latte": "Catppuccin latte",
+}
+COMMENT_SORTS: tuple[str, ...] = ("filtered", "newest", "all")
+TIMEZONES: range = range(-12, 15)
+BOOLEANS: dict[str, bool] = {"on": True, "true": True, "off": False, "false": False, "": False}
+
+
+def parse_setting(name: str, raw: str | None) -> object:
+    """Turn a raw cookie/form value into a valid setting, or Undefined if it isn't one."""
+    if raw is None:
+        return Undefined
+    match name:
+        case "theme":
+            return raw if raw in THEMES else Undefined
+        case "comments_sort":
+            return raw if raw in COMMENT_SORTS else Undefined
+        case "proxy" | "expand":
+            return BOOLEANS.get(raw, Undefined)
+        case "timezone":
+            if len(raw) <= 3 and raw.removeprefix("-").isdigit() and int(raw) in TIMEZONES:
+                return int(raw)
+            return Undefined
+        case _:
+            return Undefined
+
+
+def serialize_setting(value: object) -> str:
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    return str(value)
 
 
 class ConfigBase:
@@ -23,17 +59,16 @@ class UserSettings(ConfigBase):
     expand: bool = False
     timezone: int = 0
 
+    def __post_init__(self) -> None:
+        for i in fields(self):
+            value: object = object.__getattribute__(self, i.name)
+            if parse_setting(i.name, serialize_setting(value)) is Undefined:
+                raise ValueError(f"Invalid default_user_settings.{i.name}: {value!r}")
+
     @override
     def __getattribute__(self, name: str, /) -> Any:
         if has_request_context():
-            v: Any | Undefined = request.cookies.get(name, Undefined)
-            if v in ("on", "true"):
-                v = True
-            elif v in ("off", "false"):
-                v = False
-            elif isinstance(v, str) and v.removeprefix("-").isdigit():
-                v = int(v)
-
+            v: Any | Undefined = parse_setting(name, request.cookies.get(name))
             if v is not Undefined:
                 return v
         return super().__getattribute__(name)

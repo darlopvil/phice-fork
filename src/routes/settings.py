@@ -4,12 +4,13 @@ from urllib.parse import SplitResult, urlsplit
 from flask import Blueprint, Response, make_response, redirect, render_template, request, url_for
 from flask.typing import ResponseReturnValue
 
-from ..settings import UserSettings
+from ..settings import Undefined, UserSettings, parse_setting, serialize_setting
 
 bp: Blueprint = Blueprint("settings", __name__)
 
 COOKIE_MAX_AGE: int = 34560000  # 400 days
 OPTIONS: list[str] = [i.name for i in fields(UserSettings)]
+CHECKBOXES: list[str] = [i.name for i in fields(UserSettings) if i.type in (bool, "bool")]
 
 
 def safe_referrer(value: str | None) -> str:
@@ -36,7 +37,12 @@ def settings() -> ResponseReturnValue:
                 response.delete_cookie(i)
         else:
             for i in OPTIONS:
-                response.set_cookie(i, request.form.get(i, ""), max_age=COOKIE_MAX_AGE)
+                # An unchecked checkbox is simply missing from the form.
+                value: object = parse_setting(i, request.form.get(i, "off" if i in CHECKBOXES else None))
+                if value is Undefined:
+                    response.delete_cookie(i)
+                else:
+                    response.set_cookie(i, serialize_setting(value), max_age=COOKIE_MAX_AGE)
         return response
 
     return render_template("settings.html.jinja", referrer=safe_referrer(request.headers.get("Referer")))
