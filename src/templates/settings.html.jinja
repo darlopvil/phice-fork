@@ -7,7 +7,7 @@
 {% block content %}
     <form id="settings" method="post">
         <h1>Settings:</h1>
-        <input type="hidden" name="referrer" value="{{ request.headers.get('referer', '') }}" />
+        <input type="hidden" name="referrer" value="{{ referrer }}" />
         <label class="settings_row">
             Theme
             <select name="theme">
