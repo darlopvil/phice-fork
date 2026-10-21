@@ -1,82 +1,88 @@
-# Phice
+# Phice (personal fork)
 
 A lightweight privacy-friendly alternative front-end for Facebook.
 
-Inspired by projects like [Nitter](https://github.com/zedeus/nitter), [Invidious](https://github.com/iv-org/invidious) and others
+This is a personal fork of [Phice](https://codeberg.org/TronNerd82/phice), originally created by c4ffe14e (caffeine) and contributors. It fixes bugs and hardens the project for self-hosting while keeping the spirit of the original: simple, lightweight and JavaScript-free.
 
-# Screenshot
+It is maintained for a single private instance. There are no public instances, and fixes stay in this fork.
+
+> **Modification notice:** this is a modified version of Phice, changed by darlopvil since 2026-10-21. See the commit history and the closed issues of this repository for the details of every change.
+
+Inspired by projects like [Nitter](https://github.com/zedeus/nitter), [Invidious](https://github.com/iv-org/invidious) and others.
+
+## Screenshot
 
 ![screenshot](screenshot.png)
 
-# Features
+## Features
 
 - Free and open-source
 - Lightweight
-- No ADS
+- No ads
 - No JavaScript required
 - No account required
 - No trackers
-- RSS feeds
+- Media proxied through the instance (can be turned off per user)
+- RSS feeds for profiles and groups
 
-# Installation
+## Installation
 
-## Docker
+### From source
 
-Docker image avaliable at: https://hub.docker.com/r/c4ffe14e/phice
+Requirements:
 
-or build your image with:
+- Python >= 3.13
+- [uv](https://docs.astral.sh/uv/)
 
-```sh
-docker buildx build -t phice:latest .
-```
-
-Create a config file (optional):
-
-```sh
-cp config.example.toml config.toml
-```
-
-Run it with docker:
-
-```sh
-docker run --rm -v "./config.toml:/src/phice/config.toml:ro" -p "5000:5000" -d phice:latest
-```
-
-or with compose:
-
-```sh
-docker-compose up -d
-```
-
-## Manual
-
-### Dependencies:
-
-- python >= 3.13
-- uv
-
-Fetch project dependencies:
-
-```sh
+~~sh
 uv sync
-```
+cp config.example.toml config.toml   # optional, see Configuration
+uv run gunicorn -b 127.0.0.1:5000 -w 4 "app:app"
+~~
 
-Create a config file (optional):
+### Docker
 
-```sh
+Build the image locally and run it:
+
+~~sh
 cp config.example.toml config.toml
-```
+docker build -t phice .
+docker run -d --name phice -p 127.0.0.1:5000:5000 -v "./config.toml:/src/phice/config.toml:ro" phice
+~~
 
-And start your server:
+## Configuration
 
-```sh
-uv run gunicorn -b 0.0.0.0:5000 -w 4 "app:app"
-```
+Copy `config.example.toml` to `config.toml`. Every option is optional.
 
-# Mirrors
+`[phice]`:
 
-[Codeberg](https://codeberg.org/c4ffe14e/phice)
+| Option | Default | Description |
+|---|---|---|
+| `enable_rss` | `true` | Serve RSS feeds (`?rss=1`) for profiles and groups. |
+| `proxy` | `""` | Outgoing HTTP/SOCKS proxy used for every request to Facebook. Empty means direct. |
+| `trusted_proxies` | `0` | Number of reverse proxies in front of Phice whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted. |
 
-[GitHub](https://github.com/c4ffe14e/phice)
+`[default_user_settings]` are the defaults for visitors; each visitor can override them in Settings:
 
-[GitLab](https://gitlab.com/c4ffe14e/phice)
+| Option | Default | Values |
+|---|---|---|
+| `theme` | `"default"` | `default`, `light`, `black`, `catppuccin_mocha`, `catppuccin_latte` |
+| `comments_sort` | `"filtered"` | `filtered`, `newest`, `all` |
+| `proxy` | `true` | Proxy images and videos through the instance. |
+| `expand` | `false` | Show long posts in full instead of "Read more". |
+| `timezone` | `0` | UTC offset in hours, from `-12` to `14`. |
+
+Invalid defaults stop the app at startup with an explicit error.
+
+### Behind a reverse proxy
+
+If Phice sits behind a reverse proxy that terminates TLS, set `trusted_proxies = 1` (one proxy) so the absolute URLs in RSS feeds use the scheme the visitor used. Pages always use relative URLs for media. Only `X-Forwarded-For` and `X-Forwarded-Proto` are trusted; the `Host` header is used as-is.
+
+## License
+
+[AGPL-3.0](LICENSE), like the original project. If you run a modified version of this code as a network service, you must offer its source code to its users; the "Source code" link in the header and footer points to this repository.
+
+Third-party assets keep their own licenses, stated in the files themselves:
+
+- Icons from [Font Awesome Free](https://fontawesome.com/) — CC BY 4.0 (`src/static/assets/icons.svg`)
+- [Catppuccin](https://github.com/catppuccin/catppuccin) themes — MIT (`src/static/themes/catppuccin_*.css`)

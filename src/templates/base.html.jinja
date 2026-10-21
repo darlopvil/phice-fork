@@ -35,10 +35,19 @@
                     <a href="?rss=1" title="RSS Feed">{{ icon("rss") }}</a>
                 {%- endif %}
                 <a href="{{ 'https://facebook.com' + request.full_path }}" title="View on Facebook">{{ icon("facebook") }}</a>
-                <a href="https://codeberg.org/c4ffe14e/phice" title="Source Code">{{ icon("code") }}</a>
+                <a href="https://github.com/darlopvil/phice-fork" title="Source Code">{{ icon("code") }}</a>
                 <a href="{{ url_for('settings.settings') }}" title="Settings">{{ icon("gear") }}</a>
             </div>
         </header>
-        <main>{% block content -%}{%- endblock content %}</main>
+        <main>
+            {% block content -%}{%- endblock content %}
+            <footer>
+                <a href="https://github.com/darlopvil/phice-fork"><span>Source code</span></a>
+                <span>·</span>
+                <a href="https://codeberg.org/TronNerd82/phice"><span>Fork of Phice</span></a>
+                <span>·</span>
+                <a href="https://github.com/darlopvil/phice-fork/blob/main/LICENSE"><span>AGPL-3.0</span></a>
+            </footer>
+        </main>
     </body>
 </html>
