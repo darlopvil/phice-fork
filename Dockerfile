@@ -7,4 +7,5 @@ RUN uv sync
 COPY app.py .
 COPY src ./src
 
-CMD ["uv", "run", "gunicorn", "-b", "0.0.0.0:5000", "-w", "4", "app:app"]
+# One process so the in-memory cache is shared; threads serve concurrent pages and media streams.
+CMD ["uv", "run", "gunicorn", "-b", "0.0.0.0:5000", "-w", "1", "--threads", "16", "--timeout", "60", "app:app"]

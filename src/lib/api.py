@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from contextlib import suppress
 from pathlib import Path
@@ -25,6 +26,8 @@ API_ERROR_CODES: dict[str, int] = {
     "rate_limit": 1675004,
 }
 
+log: logging.Logger = logging.getLogger("phice")
+
 
 class Api:
     def __init__(self, *, proxy: str | None = None) -> None:
@@ -32,6 +35,7 @@ class Api:
         self.lsd: str = "_"
 
     def fetch(self, name: str, variables: JSON, *, fuck_facebook: bool = False) -> list[JSON]:
+        log.info("facebook: graphql %s", name)
         response: httpx.Response = self.client.post(
             "/api/graphql/",
             headers={
@@ -83,6 +87,7 @@ class Api:
         return result
 
     def route(self, path: str) -> tuple[JSON | None, str | None]:
+        log.info("facebook: route /%s", path)
         response: httpx.Response = self.client.post(
             "/ajax/navigation/",
             headers={
@@ -133,6 +138,7 @@ class Api:
 
     # EXPERIMENTAL
     def query_from_html(self, route: str) -> dict[str, list[JSON]]:
+        log.info("facebook: html /%s", route)
         response: httpx.Response = self.client.get(f"https://www.facebook.com/{route}", follow_redirects=True)
         if response.status_code != 200:
             raise ResponseError(f"Facebook returned {response.status_code}")

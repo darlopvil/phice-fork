@@ -37,7 +37,7 @@ Requirements:
 ~~sh
 uv sync
 cp config.example.toml config.toml   # optional, see Configuration
-uv run gunicorn -b 127.0.0.1:5000 -w 4 "app:app"
+uv run gunicorn -b 127.0.0.1:5000 -w 1 --threads 16 --timeout 60 "app:app"
 ~~
 
 ### Docker
@@ -73,6 +73,10 @@ Copy `config.example.toml` to `config.toml`. Every option is optional.
 | `timezone` | `0` | UTC offset in hours, from `-12` to `14`. |
 
 Invalid defaults stop the app at startup with an explicit error.
+
+### Caching
+
+Data fetched from Facebook is cached in memory and shared by all visitors, so repeated views and "Next" clicks send as few requests as possible: profile/group/post routes for 24 hours, profile, group and album headers for 1 hour, and rendered pages for 10 minutes. Pages cut short by a rate limit are not cached. The cache lives in the process, so run a single worker with threads (as in the commands above); several worker processes would each keep their own copy. Every request sent to Facebook is logged as `facebook: …`.
 
 ### Behind a reverse proxy
 

@@ -1,7 +1,8 @@
+import logging
 import tomllib
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -11,7 +12,19 @@ from .jinja_globals import GLOBALS
 from .settings import PhiceConfig, UserSettings
 
 
+def _setup_logging() -> None:
+    # Phice's own logger only: httpx and the media proxy would flood the log otherwise.
+    logger: logging.Logger = logging.getLogger("phice")
+    if not logger.handlers:
+        handler: logging.StreamHandler[TextIO] = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("[%(asctime)s] [%(process)d] [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S %z"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+
 def create_app(config_file: Path | None) -> Flask:
+    _setup_logging()
     app: Flask = Flask(__name__)
 
     custom_config: dict[str, Any] = {}
