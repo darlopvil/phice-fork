@@ -34,21 +34,21 @@ Requirements:
 - Python >= 3.13
 - [uv](https://docs.astral.sh/uv/)
 
-~~sh
+```sh
 uv sync
 cp config.example.toml config.toml   # optional, see Configuration
 uv run gunicorn -b 127.0.0.1:5000 -w 1 --threads 16 --timeout 60 "app:app"
-~~
+```
 
 ### Docker
 
 Build the image locally and run it:
 
-~~sh
+```sh
 cp config.example.toml config.toml
 docker build -t phice .
 docker run -d --name phice -p 127.0.0.1:5000:5000 -v "./config.toml:/src/phice/config.toml:ro" phice
-~~
+```
 
 ## Configuration
 
