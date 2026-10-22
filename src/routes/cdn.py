@@ -41,7 +41,7 @@ _clients_lock: threading.Lock = threading.Lock()
 def _client(proxy: str | None) -> httpx.Client:
     with _clients_lock:
         if proxy not in _clients:
-            _clients[proxy] = http_client(proxy=proxy)
+            _clients[proxy] = http_client(proxy=proxy, facebook_cookies=False)
         return _clients[proxy]
 
 

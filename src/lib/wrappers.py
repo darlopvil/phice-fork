@@ -7,6 +7,7 @@ def http_client(
     proxy: str | None = None,
     follow_redirects: bool = False,
     base_url: str = "",
+    facebook_cookies: bool = True,
 ) -> httpx.Client:
     client_headers: dict[str, str] = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
@@ -20,12 +21,9 @@ def http_client(
         "Sec-Fetch-Site": "same-origin",
         "TE": "trailers",
     }
-    client_cookies: dict[str, str] = {
-        "datr": "emeOaIys3XO9UYWmzznuIGOI",
-        "dpr": "2",
-        "sb": "emeOaFqK-PSnP6OJi9GHlPaN",
-        "wd": "1920x1080",
-    }
+    # Only display preferences, shared by countless browsers. No identity cookies (datr, sb):
+    # logged-out queries work without them, and fixed values would make every instance look alike.
+    client_cookies: dict[str, str] = {"dpr": "2", "wd": "1920x1080"} if facebook_cookies else {}
     client_proxy: str | None = proxy or None
 
     return httpx.Client(
