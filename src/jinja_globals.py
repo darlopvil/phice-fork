@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from flask import url_for
+from flask import request, url_for
 
 from .flask_utils import get_config, get_user_settings
 from .lib.datatypes import Post, PostType
@@ -28,6 +28,19 @@ def juuid() -> str:
     return uuid.uuid1().hex
 
 
+RSS_ENDPOINTS: tuple[str, ...] = ("profile.profile", "profile.profile_php", "groups.groups")
+
+
+def rss_url() -> str | None:
+    """Absolute URL of the current profile/group feed, or None if the page has none."""
+    if not get_config().enable_rss or request.endpoint not in RSS_ENDPOINTS:
+        return None
+    args: dict[str, str | None] = dict(request.view_args or {})
+    if request.endpoint == "profile.profile_php":
+        args["id"] = request.args.get("id")
+    return url_for(request.endpoint, **args, rss=1, _external=True)
+
+
 GLOBALS: dict[str, Any] = {
     "type": types,
     "get_config": get_config,
@@ -35,4 +48,5 @@ GLOBALS: dict[str, Any] = {
     "THEMES": THEMES,
     "post_url": post_url,
     "uuid": juuid,
+    "rss_url": rss_url,
 }

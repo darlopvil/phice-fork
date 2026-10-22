@@ -18,8 +18,8 @@
         <meta property="og:url" content="{{ request.base_url }}" />
         <meta property="og:description" content="A lightweight privacy-friendly alternative front-end for Facebook" />
         <meta property="og:site_name" content="Phice" />
-        {% if get_config().enable_rss and request.endpoint in ("profile.profile", "groups.groups") -%}
-            <link rel="alternate" type="application/rss+xml" href="?rss=1" title="RSS Feed" />
+        {% if rss_url() -%}
+            <link rel="alternate" type="application/rss+xml" href="{{ rss_url() }}" title="{{ title }} | Phice" />
         {%- endif %}
         {% block head -%}{%- endblock head %}
     </head>
@@ -31,8 +31,8 @@
             </a>
             <div id="header_buttons">
                 <a href="{{ url_for('home.home') }}" title="Search">{{ icon("search") }}</a>
-                {% if get_config().enable_rss and request.endpoint in ("profile.profile", "groups.groups") -%}
-                    <a href="?rss=1" title="RSS Feed">{{ icon("rss") }}</a>
+                {% if rss_url() -%}
+                    <a href="{{ rss_url() }}" title="RSS Feed">{{ icon("rss") }}</a>
                 {%- endif %}
                 <a href="{{ 'https://facebook.com' + request.full_path }}" title="View on Facebook">{{ icon("facebook") }}</a>
                 <a href="https://github.com/darlopvil/phice-fork" title="Source Code">{{ icon("code") }}</a>

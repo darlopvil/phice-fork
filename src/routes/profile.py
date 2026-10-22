@@ -1,5 +1,6 @@
 from flask import Blueprint, abort, render_template, request
 from flask.typing import ResponseReturnValue
+from werkzeug.utils import secure_filename
 
 from ..flask_utils import get_config
 from ..lib.extractor import get_profile
@@ -25,5 +26,8 @@ def profile(username: str = "", _: str | None = None) -> ResponseReturnValue:
     feed, scroll = get_profile(token, request.args.get("cursor"), proxy=get_config().proxy)
 
     if "rss" in request.args:
-        return render_template("timeline.rss.jinja", feed=feed), {"content-type": "application/rss+xml; charset=utf-8"}
+        return render_template("timeline.rss.jinja", feed=feed), {
+            "content-type": "application/rss+xml; charset=utf-8",
+            "content-disposition": f'inline; filename="{secure_filename(feed.token) or "feed"}.rss"',
+        }
     return render_template("timeline.html.jinja", feed=feed, scroll=scroll, title=feed.name)
