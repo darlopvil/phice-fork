@@ -61,6 +61,7 @@ Copy `config.example.toml` to `config.toml`. Every option is optional.
 | `enable_rss` | `true` | Serve RSS feeds (`?rss=1`) for profiles and groups. |
 | `proxy` | `""` | Outgoing HTTP/SOCKS proxy used for every request to Facebook. Empty means direct. |
 | `trusted_proxies` | `0` | Number of reverse proxies in front of Phice whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted. |
+| `show_tracebacks` | `false` | Show Python tracebacks on error pages. They are always written to the log. |
 
 `[default_user_settings]` are the defaults for visitors; each visitor can override them in Settings:
 

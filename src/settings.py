@@ -79,6 +79,7 @@ class PhiceConfig(ConfigBase):
     enable_rss: bool = True
     proxy: str | None = None
     trusted_proxies: int = 0
+    show_tracebacks: bool = False
 
     def __post_init__(self) -> None:
         if self.trusted_proxies < 0:

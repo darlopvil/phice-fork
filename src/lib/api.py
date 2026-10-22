@@ -3,16 +3,14 @@ from collections import defaultdict
 from contextlib import suppress
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
-from .datatypes import JSON
-
-if TYPE_CHECKING:
-    import httpx
+import httpx
 import orjson
 from bs4 import BeautifulSoup, Tag
 
-from .exceptions import ResponseError
+from .datatypes import JSON
+from .exceptions import NetworkError, ParsingError, ResponseError
 from .wrappers import http_client
 
 DATA_PATH: Path = Path(__file__).resolve().parent / "data"
@@ -34,9 +32,26 @@ class Api:
         self.client: httpx.Client = http_client(base_url="https://www.facebook.com", proxy=proxy)
         self.lsd: str = "_"
 
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        data: dict[str, str | int] | None = None,
+        follow_redirects: bool = False,
+    ) -> httpx.Response:
+        try:
+            return self.client.request(method, url, headers=headers, data=data, follow_redirects=follow_redirects)
+        except httpx.TimeoutException as e:
+            raise NetworkError("Facebook took too long to respond.", timeout=True) from e
+        except httpx.HTTPError as e:
+            raise NetworkError("Couldn't reach Facebook.") from e
+
     def fetch(self, name: str, variables: JSON, *, fuck_facebook: bool = False) -> list[JSON]:
         log.info("facebook: graphql %s", name)
-        response: httpx.Response = self.client.post(
+        response: httpx.Response = self._request(
+            "POST",
             "/api/graphql/",
             headers={
                 "Accept": "*/*",
@@ -79,7 +94,12 @@ class Api:
         if response.status_code != 200:
             raise ResponseError(f"Facebook returned {response.status_code}")
 
-        result: list[JSON] = [orjson.loads(i) for i in response.text.splitlines()]
+        try:
+            result: list[JSON] = [orjson.loads(i) for i in response.text.splitlines()]
+        except orjson.JSONDecodeError as e:
+            raise ParsingError(f"{name}: Facebook didn't return JSON") from e
+        if not result:
+            raise ParsingError(f"{name}: Facebook returned an empty response")
         errors: list[JSON] | None = result[0].get("errors")
         if errors and not (fuck_facebook and "field_exception" in errors[0]["message"]):
             raise ResponseError(f"{name}: {errors[0]['message']}", code=errors[0].get("code"))
@@ -88,7 +108,8 @@ class Api:
 
     def route(self, path: str) -> tuple[JSON | None, str | None]:
         log.info("facebook: route /%s", path)
-        response: httpx.Response = self.client.post(
+        response: httpx.Response = self._request(
+            "POST",
             "/ajax/navigation/",
             headers={
                 "Accept": "*/*",
@@ -125,7 +146,12 @@ class Api:
             },
         )
 
-        result: JSON = orjson.loads(response.text[9:])["payload"].get("payload", {}).get("result", {})
+        if response.status_code != 200:
+            raise ResponseError(f"Facebook returned {response.status_code}")
+        try:
+            result: JSON = orjson.loads(response.text.removeprefix("for (;;);"))["payload"].get("payload", {}).get("result", {})
+        except (orjson.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
+            raise ParsingError("route: Facebook returned an unexpected response") from e
         route_type: str | None = None
         if not result:
             return None, None
@@ -139,7 +165,7 @@ class Api:
     # EXPERIMENTAL
     def query_from_html(self, route: str) -> dict[str, list[JSON]]:
         log.info("facebook: html /%s", route)
-        response: httpx.Response = self.client.get(f"https://www.facebook.com/{route}", follow_redirects=True)
+        response: httpx.Response = self._request("GET", f"https://www.facebook.com/{route}", follow_redirects=True)
         if response.status_code != 200:
             raise ResponseError(f"Facebook returned {response.status_code}")
 

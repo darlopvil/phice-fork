@@ -4,6 +4,8 @@ proxy = ""
 # Number of reverse proxies in front of Phice whose X-Forwarded-For/X-Forwarded-Proto
 # headers are trusted. 0 = none (Phice is reached directly).
 trusted_proxies = 0
+# Show Python tracebacks on error pages (they are always written to the log).
+show_tracebacks = false
 
 [default_user_settings]
 theme = "default"

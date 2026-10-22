@@ -1,18 +1,18 @@
+import functools
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import replace
-from typing import TYPE_CHECKING, cast
+from typing import cast
 from urllib.parse import ParseResult, parse_qs, urlencode, urlparse
 
+import httpx
 import orjson
-
-if TYPE_CHECKING:
-    import httpx
 
 from .api import API_ERROR_CODES, Api
 from .cache import MISS, TTLCache
 from .datatypes import JSON, Album, Feed, Photo, Post, Scroll, SearchItem, User
-from .exceptions import NotFoundError, ParsingError, ResponseError
+from .exceptions import NetworkError, NotFoundError, ParsingError, ResponseError
 from .parsers import parse_album_item, parse_comment, parse_post, parse_search
 from .utils import base64s, catch_rate_limit, urlbasename
 from .wrappers import http_client
@@ -53,6 +53,20 @@ PAGES: TTLCache = TTLCache(maxsize=256)
 log: logging.Logger = logging.getLogger("phice")
 
 
+def _guard[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
+    """Turn a payload shape the parsers don't expect into a ParsingError, logging where it broke."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return fn(*args, **kwargs)
+        except (KeyError, IndexError, TypeError, AttributeError) as e:
+            log.exception("facebook: unexpected response in %s", fn.__name__)
+            raise ParsingError(f"{fn.__name__}: unexpected response") from e
+
+    return wrapper
+
+
 def _route(api: Api, path: str) -> tuple[JSON | None, str | None]:
     if (hit := ROUTES.get(("route", path))) is not MISS:
         return cast("tuple[JSON | None, str | None]", hit)
@@ -69,6 +83,7 @@ def _cache_page[T](key: tuple[str | None, ...], result: T, scroll: Scroll) -> T:
     return result
 
 
+@_guard
 def get_profile(username: str, cursor: str | None = None, *, proxy: str | None = None) -> tuple[Feed, Scroll]:
     page_key: tuple[str | None, ...] = ("profile", username, cursor)
     if (hit := PAGES.get(page_key)) is not MISS:
@@ -215,6 +230,7 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
     return feed, posts_feed
 
 
+@_guard
 def get_post(
     token: str,
     cursor: str | None = None,
@@ -343,6 +359,7 @@ def _resolve_post_id(api: Api, token: str) -> str | None:
     return post_id
 
 
+@_guard
 def get_group(token: str, cursor: str | None = None, *, proxy: str | None = None) -> tuple[Feed, Scroll]:
     page_key: tuple[str | None, ...] = ("group", token, cursor)
     if (hit := PAGES.get(page_key)) is not MISS:
@@ -375,19 +392,20 @@ def get_group(token: str, cursor: str | None = None, *, proxy: str | None = None
             else:
                 raise ParsingError("Couldn't find page_info")
         if scroll.has_next:
-            for _ in range(GROUP_PAGING):
-                response: list[JSON] = api.GroupsCometFeedRegularStoriesPaginationQuery(group_id, scroll.cursor)
-                rest: list[JSON] = [
-                    i for i in response[1:] if "GroupsCometFeedRegularStories_group_group_feed" in i.get("label", "")
-                ]
+            with catch_rate_limit(scroll):
+                for _ in range(GROUP_PAGING):
+                    response: list[JSON] = api.GroupsCometFeedRegularStoriesPaginationQuery(group_id, scroll.cursor)
+                    rest: list[JSON] = [
+                        i for i in response[1:] if "GroupsCometFeedRegularStories_group_group_feed" in i.get("label", "")
+                    ]
 
-                if edges := response[0]["data"]["node"]["group_feed"]["edges"]:
-                    feed.posts.append(parse_post(edges[0]["node"]))
-                feed.posts.extend(parse_post(i["data"]["node"]) for i in rest[:-1])
-                scroll.cursor = rest[-1]["data"]["page_info"]["end_cursor"]
-                scroll.has_next = rest[-1]["data"]["page_info"]["has_next_page"]
-                if not scroll.has_next:
-                    break
+                    if edges := response[0]["data"]["node"]["group_feed"]["edges"]:
+                        feed.posts.append(parse_post(edges[0]["node"]))
+                    feed.posts.extend(parse_post(i["data"]["node"]) for i in rest[:-1])
+                    scroll.cursor = rest[-1]["data"]["page_info"]["end_cursor"]
+                    scroll.has_next = rest[-1]["data"]["page_info"]["has_next_page"]
+                    if not scroll.has_next:
+                        break
 
     return _cache_page(page_key, (feed, scroll), scroll)
 
@@ -427,6 +445,7 @@ def _fetch_group_header(api: Api, group_id: str) -> Feed:
     return feed
 
 
+@_guard
 def get_album(token: str, cursor: str | None = None, *, proxy: str | None = None) -> tuple[Album, Scroll]:
     page_key: tuple[str | None, ...] = ("album", token, cursor)
     if (hit := PAGES.get(page_key)) is not MISS:
@@ -472,6 +491,7 @@ def get_album(token: str, cursor: str | None = None, *, proxy: str | None = None
     return _cache_page(page_key, (album, scroll), scroll)
 
 
+@_guard
 def get_search(
     query: str,
     category: str,
@@ -509,13 +529,19 @@ def get_search(
     return _cache_page(page_key, (results, scroll), scroll)
 
 
+@_guard
 def get_shared_url(route: str, proxy: str | None = None) -> str | None:
     if (hit := ROUTES.get(("share", route))) is not MISS:
         return cast("str", hit)
 
     log.info("facebook: share /%s", route)
-    with http_client(proxy=proxy) as client:
-        r: httpx.Response = client.get(f"https://www.facebook.com/share/{route}", follow_redirects=False)
+    try:
+        with http_client(proxy=proxy) as client:
+            r: httpx.Response = client.get(f"https://www.facebook.com/share/{route}", follow_redirects=False)
+    except httpx.TimeoutException as e:
+        raise NetworkError("Facebook took too long to respond.", timeout=True) from e
+    except httpx.HTTPError as e:
+        raise NetworkError("Couldn't reach Facebook.") from e
 
     location: str | None = r.headers.get("location")
     if r.status_code != 302 or location is None:
