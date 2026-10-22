@@ -12,16 +12,16 @@ def types(obj: object) -> str:
     return type(obj).__name__
 
 
-def post_url(p: Post) -> str:
+def post_url(p: Post, *, external: bool = False) -> str:
     author: str = p.author.username or p.author.id
 
     if p.from_group:
-        return url_for("posts.groups_posts", author=p.from_group.username, token=p.post_id)
+        return url_for("posts.groups_posts", author=p.from_group.username, token=p.post_id, _external=external)
     if p.post_type == PostType.VIDEO:
-        return url_for("posts.videos", author=author, token=p.post_id)
+        return url_for("posts.videos", author=author, token=p.post_id, _external=external)
     if p.post_type == PostType.REEL:
-        return url_for("posts.reel", token=p.post_id)
-    return url_for("posts.posts", author=author, token=p.post_id)
+        return url_for("posts.reel", token=p.post_id, _external=external)
+    return url_for("posts.posts", author=author, token=p.post_id, _external=external)
 
 
 def juuid() -> str:

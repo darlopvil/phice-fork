@@ -1,44 +1,24 @@
-<?xml version="1.0"?>
-<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" version="2.0">
+<?xml version="1.0" encoding="UTF-8"?>
+{%- set feed_url = url_for("groups.groups", token=feed.token, _external=true) if feed.is_group else url_for("profile.profile", username=feed.token, _external=true) %}
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss/" version="2.0">
     <channel>
         <title>{{ feed.name }} | Phice</title>
-        <link>{{ url_for("groups.groups", token=feed.token, _external=true) if feed.is_group else url_for("profile.profile", username=feed.token, _external=true) }}</link>
+        <link>{{ feed_url }}</link>
         <description>RSS feed for {{ feed.name }}</description>
-        {% if feed.picture_url -%}
-            <image>
-                <url>{{ feed.picture_url | proxy(external=true) }}</url>
-                <title></title>
-                <link>{{
-                    url_for(
-                        "groups.groups",
-                        token=feed.token,
-                        _external=true,
-                    ) if feed.is_group else url_for(
-                        "profile.profile",
-                        username=feed.token,
-                        _external=true,
-                    )
-                }}</link>
-            </image>
+        <atom:link href="{{ feed_url }}?rss=1" rel="self" type="application/rss+xml" />
+        {%- if feed.profile_photo %}
+        <image>
+            <url>{{ feed.profile_photo.url | proxy(external=true) }}</url>
+            <title>{{ feed.name }} | Phice</title>
+            <link>{{ feed_url }}</link>
+        </image>
         {%- endif %}
         {%- for i in feed.posts %}
         {%- set t = type(i.attachment) if i.attachment else none %}
         <item>
-            <title>{{ i.text[:60] }} | {{ i.author.name }}</title>
-            <link>{{
-                url_for(
-                    "posts.groups_posts",
-                    author=i.from_group.username,
-                    token=i.post_id,
-                    _external=true,
-                ) if i.from_group else url_for(
-                    "posts.videos" if i.is_video else "posts.posts",
-                    author=i.author.username,
-                    token=i.post_id,
-                    _external=true,
-                )
-            }}</link>
-            {%- if t == "Video" or t == "AnimatedImage" %}
+            <title>{{ (i.text | replace("\n", " ") | truncate(60, leeway=0)) or "Post" }} | {{ i.author.name }}</title>
+            <link>{{ post_url(i, external=true) }}</link>
+            {%- if (t == "Video" or t == "AnimatedImage") and i.attachment.url %}
             <enclosure url="{{ i.attachment.url | proxy(external=true) }}" type="video/mp4" length="0" />
             <media:content url="{{ i.attachment.url | proxy(external=true) }}" type="video/mp4" medium="video" />
             {%- if t == "Video" and i.attachment.thumbnail_url %}
@@ -47,7 +27,7 @@
             {%- elif t == "AttachmentAlbum" %}
                 {%- set ns = namespace(enclosed=false) %}
                 {%- for j in i.attachment.items %}
-                    {%- if not ns.enclosed and type(j) == "Video" %}
+                    {%- if not ns.enclosed and type(j) == "Video" and j.url %}
             <enclosure url="{{ j.url | proxy(external=true) }}" type="video/mp4" length="0" />
             <media:content url="{{ j.url | proxy(external=true) }}" type="video/mp4" medium="video" />
                         {%- if j.thumbnail_url %}
@@ -57,38 +37,48 @@
                     {%- endif %}
                 {%- endfor %}
             {%- endif %}
-            <description><![CDATA[<p>{{ i.text }}</p>
+            <description><![CDATA[<p>{% for line in i.text.split("\n") %}{{ line }}{% if not loop.last %}<br />{% endif %}{% endfor %}</p>
                 {%- if i.attachment %}
-                    <br />
                     {%- if t == "Photo" -%}
-                        <img src="{{ i.attachment.url | proxy(external=true) }}" />
-                    {%- elif t == "Video" or t == "AnimatedImage"  -%}
-                        <video controls src="{{ i.attachment.url | proxy(external=true) }}"><a href="{{ i.attachment.url | proxy(external=true) }}">Video</a></video>
+                        <img src="{{ i.attachment.url | proxy(external=true) }}" alt="{{ i.attachment.alt_text }}" />
+                    {%- elif t == "Video" -%}
+                        {%- if i.attachment.url -%}
+                            <video controls preload="metadata" src="{{ i.attachment.url | proxy(external=true) }}"{% if i.attachment.thumbnail_url %} poster="{{ i.attachment.thumbnail_url | proxy(external=true) }}"{% endif %}><a href="{{ i.attachment.url | proxy(external=true) }}">Video</a></video>
+                        {%- elif i.attachment.thumbnail_url -%}
+                            <a href="{{ post_url(i, external=true) }}"><img src="{{ i.attachment.thumbnail_url | proxy(external=true) }}" alt="Video thumbnail" /></a>
+                        {%- endif -%}
+                    {%- elif t == "AnimatedImage" -%}
+                        <video controls loop muted preload="metadata" src="{{ i.attachment.url | proxy(external=true) }}"><a href="{{ i.attachment.url | proxy(external=true) }}">GIF</a></video>
                     {%- elif t == "AttachmentAlbum" -%}
                         {%- for j in i.attachment.items -%}
-                            {%- set jt = type(j) -%}
-                            {%- if jt == "Photo" -%}
-                                <img src="{{ j.url | proxy(external=true) }}" />
-                            {%- elif jt == "Video" -%}
-                                <video controls src="{{ j.url | proxy(external=true) }}"><a href="{{ j.url | proxy(external=true) }}">Video</a></video>
+                            {%- if type(j) == "Photo" -%}
+                                <img src="{{ j.url | proxy(external=true) }}" alt="{{ j.alt_text }}" />
+                            {%- elif j.url -%}
+                                <video controls preload="metadata" src="{{ j.url | proxy(external=true) }}"><a href="{{ j.url | proxy(external=true) }}">Video</a></video>
+                            {%- elif j.thumbnail_url -%}
+                                <a href="{{ post_url(i, external=true) }}"><img src="{{ j.thumbnail_url | proxy(external=true) }}" alt="Video thumbnail" /></a>
                             {%- endif -%}
                         {%- endfor -%}
+                        {%- if i.attachment.items_left > 0 -%}
+                            <p><a href="{{ url_for('albums.albums', set=i.attachment.id, _external=true) }}">+{{ i.attachment.items_left }} more</a></p>
+                        {%- endif -%}
                     {%- elif t == "Poll" -%}
+                        <p><b>{{ i.attachment.text }}</b></p>
                         {%- for j in i.attachment.options -%}
-                            {{ j[0] ~ " (" ~ j[1] ~ ") " ~ j[2] ~ "%" }}<br />
+                            {{ j[0] }} ({{ j[1] | format_number }}) {{ j[2] }}%<br />
                         {%- endfor -%}
                     {%- elif t == "Event" -%}
-                        {{ i.attachment.name }}<br />{{ i.attachment.time }}<br />{{ i.attachment.description }}
+                        <p><b>{{ i.attachment.title }}</b><br />{{ i.attachment.time }}{% if i.attachment.description %}<br />{{ i.attachment.description }}{% endif %}</p>
                     {%- elif t == "Unavailable" -%}
                         <p>This content isn't available right now.</p>
                     {%- elif t == "URL" or t == "Post" -%}
                     {%- else -%}
                         <p>Unsupported attachment.</p>
                     {%- endif %}
-                {% endif -%}
-                <br /><span>Reactions: {{ i.reactions["total"] | format_number }} | Comments: {{ i.comments_count | format_number }} | Shares: {{ i.share_count | format_number }}</span>]]></description>
-            <author>{{ i.author.name }}</author>
-            <guid>{{ i.post_id }}</guid>
+                {%- endif %}
+                <p>Reactions: {{ i.reactions.total | format_number }} | Comments: {{ i.comments_count | format_number }} | Shares: {{ i.share_count | format_number }}</p>]]></description>
+            <dc:creator>{{ i.author.name }}</dc:creator>
+            <guid isPermaLink="false">{{ i.post_id }}</guid>
             <pubDate>{{ i.time | format_time_rfc822 }}</pubDate>
         </item>
         {%- endfor %}

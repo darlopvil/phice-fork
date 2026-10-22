@@ -25,5 +25,5 @@ def profile(username: str = "", _: str | None = None) -> ResponseReturnValue:
     feed, scroll = get_profile(token, request.args.get("cursor"), proxy=get_config().proxy)
 
     if "rss" in request.args:
-        return render_template("timeline.rss.jinja", feed=feed), {"content-type": "application/rss+xml"}
+        return render_template("timeline.rss.jinja", feed=feed), {"content-type": "application/rss+xml; charset=utf-8"}
     return render_template("timeline.html.jinja", feed=feed, scroll=scroll, title=feed.name)
