@@ -40,10 +40,15 @@
 {%- endmacro %}
 
 {% macro animated_image(node) -%}
+    {#- No autoplay: browsers that block it (even muted) would show a frozen box. One click plays it. -#}
     <video
+        class="animated_image"
+        controls
         loop
-        autoplay
         muted
+        playsinline
+        preload="metadata"
+        title="GIF"
         src="{{ node.url | proxy }}"
     ></video>
 {%- endmacro %}
