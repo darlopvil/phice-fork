@@ -1,0 +1,16 @@
+# Copy to docker-compose.yml and adjust. The image is built locally from this repository.
+services:
+  phice:
+    build: .
+    image: phice:local
+    container_name: phice
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      # Only reachable from this machine: put a reverse proxy in front for public access.
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - ./config.toml:/src/phice/config.toml:ro

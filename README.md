@@ -42,13 +42,15 @@ uv run gunicorn -b 127.0.0.1:5000 -w 1 --threads 16 --timeout 60 "app:app"
 
 ### Docker
 
-Build the image locally and run it:
+The image is built locally from this repository, with dependencies pinned by `uv.lock`:
 
 ```sh
 cp config.example.toml config.toml
-docker build -t phice .
-docker run -d --name phice -p 127.0.0.1:5000:5000 -v "./config.toml:/src/phice/config.toml:ro" phice
+cp docker-compose.example.yaml docker-compose.yml
+docker compose up -d --build
 ```
+
+The example only binds Phice to `127.0.0.1:5000`: put a reverse proxy in front of it for public access, and set `trusted_proxies`. The container runs as an unprivileged user on a read-only filesystem. `/healthz` answers `ok` without contacting Facebook, for health checks and uptime monitors.
 
 ## Configuration
 
