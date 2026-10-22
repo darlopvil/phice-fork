@@ -178,6 +178,37 @@ input[type="number"] {
     transform: scaleX(-1);
 }
 
+/* Most used reactions as small overlapping badges, so differently shaped glyphs line up. */
+.post_feedback .reaction_icons,
+.comment_feedback .reaction_icons {
+    display: inline-flex;
+    align-items: center;
+    padding-left: 0;
+    margin-right: 0;
+}
+.reaction_icons .icon {
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    padding: 3px;
+    border-radius: 50%;
+    background-color: var(--background3);
+    box-shadow: 0 0 0 2px var(--background2);
+    vertical-align: middle;
+}
+.reaction_icons .icon + .icon {
+    margin-left: -3px;
+}
+/* The most used reaction stays on top. */
+.reaction_icons .icon:nth-child(1) {
+    position: relative;
+    z-index: 3;
+}
+.reaction_icons .icon:nth-child(2) {
+    position: relative;
+    z-index: 2;
+}
+
 .icon {
     display: inline;
     width: 16px;
