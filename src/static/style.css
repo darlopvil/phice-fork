@@ -164,10 +164,18 @@ input[type="number"] {
     padding-left: 4px;
 }
 
-#comment_sort_form {
+#comment_sort {
     display: flex;
     justify-content: end;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
+}
+#comment_sort a > span {
+    color: var(--accent);
+}
+
+.icon.flip {
+    transform: scaleX(-1);
 }
 
 .icon {

@@ -6,25 +6,31 @@
     {{ Post(post, expanded=true) }}
     {%- if post.feedback_id is not none %}
         <section class="comment_section">
-            <form id="comment_sort_form">
-                {% if "comment_id" in request.args -%}
-                    <input type="hidden" name="comment_id" value="{{ request.args.comment_id }}" />
-                {%- endif %}
-                {% if "fbid" in request.args -%}
-                    <input type="hidden" name="fbid" value="{{ request.args.fbid }}" />
-                {%- endif %}
-                <select name="sort">
-                    {%- set sort = request.args.get("sort", get_user_settings().comments_sort) -%}
-                    <option value="filtered">Most relevant</option>
-                    <option value="newest" {{ "selected" if sort == "newest" }}>Newest</option>
-                    <option value="all" {{ "selected" if sort == "all" }}>All</option>
-                </select>
-                <button type="submit" class="icon_button">{{ icon("chevron-right") }}</button>
-            </form>
+            <nav id="comment_sort" aria-label="Sort comments">
+                {%- set sort = request.args.get("sort", get_user_settings().comments_sort) -%}
+                {%- for value, label in (("filtered", "Most relevant"), ("newest", "Newest"), ("all", "All")) -%}
+                    {%- if not loop.first %}<span>·</span>{% endif -%}
+                    {%- if value == sort -%}
+                        <b aria-current="true">{{ label }}</b>
+                    {%- else -%}
+                        <a href="{{ self_url(sort=value, cursor=none) }}"><span>{{ label }}</span></a>
+                    {%- endif -%}
+                {%- endfor -%}
+            </nav>
             {% if post.comments %}
                 {% for i in post.comments %}
                     {{ Comment(i) }}
                 {% endfor %}
+                {%- set main = post.comments[0] -%}
+                {%- set shown = post.comments | selectattr("depth", "eq", main.depth + 1) | list | length -%}
+                {% if "comment_id" in request.args and not request.args.get("cursor") and not scroll.has_next
+                    and not scroll.rate_limited and shown < main.replies_count %}
+                    <span class="centered card">{{ icon("lock") }}
+                        {%- if shown == 0 %} Facebook doesn't show these replies to logged-out visitors.
+                        {%- else %} Facebook only shows {{ shown }} of {{ main.replies_count }} replies to logged-out visitors.
+                        {%- endif %}
+                    </span>
+                {% endif %}
                 {% if scroll.rate_limited %}
                     <span class="centered card">Couldn't fetch rest of comments rate-limited.</span>
                 {% endif %}

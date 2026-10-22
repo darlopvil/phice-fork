@@ -53,6 +53,12 @@
     ></video>
 {%- endmacro %}
 
+{% macro reaction_summary(reactions) -%}
+    {%- set icons = top_reactions(reactions) -%}
+    <span class="reaction_icons">{% for i in icons or ["thumbs-up"] %}{{ icon(i) }}{% endfor %}</span>
+    {#- -#}<span title="{{ reactions.total | format_number }} reactions">{{ reactions.total | format_number }}</span>
+{%- endmacro %}
+
 {% macro message(text, i=none) -%}
     <span class="message_card">{{ icon(i) + " " if i is not none }}{{ text }}</span>
 {%- endmacro %}
@@ -136,13 +142,7 @@
         {% if comment.depth == 0 -%}
             <a
                 class="comment_link"
-                href="{{ url_for(request.endpoint,
-                        author=request.view_args.author,
-                        token=request.view_args.token,
-                        comment_id=comment.id,
-                        sort=request.args.get('sort'),
-                    )
-                }}"
+                href="{{ self_url(comment_id=comment.id, cursor=none) }}"
             ></a>
         {%- endif %}
         <a
@@ -176,7 +176,7 @@
                 <span class="comment_time" title="{{ comment.time | format_time_full }}">{{ comment.time | format_time }}</span>
                 <div class="comment_feedback">
                     <div class="reactions">
-                        {{ icon("thumbs-up") }}<span title="Reactions">{{ comment.reactions.total | format_number }}</span>
+                        {{ reaction_summary(comment.reactions) }}
                     </div>
                     <div class="reactions_popup">
                         {{ icon("thumbs-up") }}<span>{{ comment.reactions.like | format_number }}</span>
@@ -234,7 +234,7 @@
         {% if post.feedback_id is not none -%}
             <div class="post_feedback">
                 <div class="reactions">
-                    {{ icon("thumbs-up") }}<span title="Reactions">{{ post.reactions.total | format_number }}</span>
+                    {{ reaction_summary(post.reactions) }}
                 </div>
                 <div class="reactions_popup">
                     {{ icon("thumbs-up") }}<span>{{ post.reactions.like | format_number }}</span>
