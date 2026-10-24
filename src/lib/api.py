@@ -48,7 +48,7 @@ class Api:
         except httpx.HTTPError as e:
             raise NetworkError("Couldn't reach Facebook.") from e
 
-    def fetch(self, name: str, variables: JSON, *, fuck_facebook: bool = False) -> list[JSON]:
+    def fetch(self, name: str, variables: JSON) -> list[JSON]:
         log.info("facebook: graphql %s", name)
         response: httpx.Response = self._request(
             "POST",
@@ -100,9 +100,13 @@ class Api:
             raise ParsingError(f"{name}: Facebook didn't return JSON") from e
         if not result:
             raise ParsingError(f"{name}: Facebook returned an empty response")
-        errors: list[JSON] | None = result[0].get("errors")
-        if errors and not (fuck_facebook and "field_exception" in errors[0]["message"]):
+        errors: list[JSON] = result[0].get("errors") or []
+        # Like Facebook's own client, accept partial data when only some fields failed: logged-out
+        # visitors get field errors on parts Phice doesn't use (e.g. ads or translation features).
+        if errors and not (result[0].get("data") is not None and all("field_exception" in i["message"] for i in errors)):
             raise ResponseError(f"{name}: {errors[0]['message']}", code=errors[0].get("code"))
+        if errors:
+            log.info("facebook: %s returned partial data (%d field errors)", name, len(errors))
 
         return result
 
@@ -239,7 +243,6 @@ class Api:
                 "stream_count": 1,
                 "userID": user_id,
             },
-            fuck_facebook=True,
         )
 
     def ProfileCometTimelineFeedRefetchQuery(self, user_id: str, cursor: str | None) -> list[JSON]:
