@@ -31,7 +31,7 @@
                     {% for i in feed.info %}
                         <a {% if i.url %}href="{{ i.url }}"{% endif %}>
                             <div class="timeline_info_cards">
-                                {%- if i.type == "website" -%}
+                                {%- if i.type in ("website", "other_account") -%}
                                     {{ icon("link") }}
                                 {%- elif i.type in ("address", "hometown", "current_city") -%}
                                     {{ icon("location") }}
@@ -48,7 +48,7 @@
                                 {%- else -%}
                                     {{ icon("circle-info") }}
                                 {%- endif -%}
-                                <span>{{ i.text }}</span>
+                                <span>{{ i.network ~ " · " if i.network }}{{ i.text }}</span>
                             </div>
                         </a>
                     {% endfor %}

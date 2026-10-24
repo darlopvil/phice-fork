@@ -14,7 +14,7 @@ from .cache import MISS, TTLCache
 from .datatypes import JSON, Album, Feed, Photo, Post, Scroll, SearchItem, User
 from .exceptions import NetworkError, NotFoundError, ParsingError, ResponseError
 from .parsers import parse_album_item, parse_comment, parse_post, parse_search
-from .utils import base64s, catch_rate_limit, urlbasename
+from .utils import base64s, catch_rate_limit, network_name, urlbasename
 from .wrappers import http_client
 
 COMMENT_FILTERS: defaultdict[str | None, str] = defaultdict(
@@ -202,7 +202,7 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
 
     if side["profile_tile_section_type"] == "INTRO":
         for i in side["profile_tile_views"]["nodes"][1]["view_style_renderer"]["view"]["profile_tile_items"]["nodes"]:
-            item: dict[str, str | None] = {"text": None, "url": None, "type": None}
+            item: dict[str, str | None] = {"text": None, "url": None, "type": None, "network": None}
             renderer: JSON = i["node"]["timeline_context_item"]["renderer"]
 
             match renderer["__typename"]:
@@ -224,6 +224,9 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
                         else:
                             item["url"] = url
             item["type"] = i["node"]["timeline_context_item"]["timeline_context_list_item_type"][11:].lower()
+            if item["type"] == "other_account" and item["url"]:
+                # Facebook only gives the username, so the network comes from the link.
+                item["network"] = network_name(item["url"])
 
             feed.info.append(item)
 
