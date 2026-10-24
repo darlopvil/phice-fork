@@ -159,6 +159,8 @@ class Feed:
     info: list[dict[str, str | None]] = field(default_factory=list)
     posts: list[Post] = field(default_factory=list)
     media: list[AlbumItem] = field(default_factory=list)
+    events: list["EventPage"] = field(default_factory=list)
+    lists: list[tuple[str, str]] = field(default_factory=list)  # a tab's collections: (slug, name)
 
 
 @dataclass(kw_only=True)

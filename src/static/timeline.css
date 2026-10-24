@@ -76,6 +76,39 @@
     color: var(--accent);
 }
 
+.event_list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event_card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.event_card img {
+    flex-shrink: 0;
+    width: 120px;
+    aspect-ratio: 235 / 165;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.event_card_text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.event_card_time {
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
 #timeline_feed {
     display: flex;
     flex-direction: column;

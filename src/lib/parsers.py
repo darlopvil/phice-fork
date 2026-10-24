@@ -365,6 +365,25 @@ def parse_page_video(node: JSON) -> Video:
     )
 
 
+def parse_collection_event(item: JSON) -> EventPage | None:
+    """An event card from a profile's events collection; None for anything else."""
+    node: JSON = item["node"]
+    if node.get("__typename") != "Event":
+        return None
+    place: object = _dig(node, "event_place", "contextual_name")
+    city: object = _dig(node, "event_place", "location", "reverse_geocode", "city")
+    image: object = _dig(item, "image", "uri")
+    return EventPage(
+        id=node["id"],
+        name=node["name"],
+        time=node.get("day_time_sentence") or "",
+        place=place if isinstance(place, str) else None,
+        city=city if isinstance(city, str) else None,
+        is_canceled=bool(node.get("is_canceled")),
+        cover_photo=Photo(url=image) if isinstance(image, str) else None,
+    )
+
+
 def _dig(obj: object, *keys: str) -> object:
     """obj[k1][k2]..., or None as soon as a key is missing or a value is null."""
     for key in keys:

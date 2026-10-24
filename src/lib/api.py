@@ -271,6 +271,19 @@ class Api:
             },
         )
 
+    def ProfileCometAppCollectionEventsRendererPaginationQuery(
+        self, collection_id: str, cursor: str | None, count: int
+    ) -> list[JSON]:
+        return self.fetch(
+            "ProfileCometAppCollectionEventsRendererPaginationQuery",
+            {
+                "count": count,
+                "cursor": cursor,
+                "scale": 1,
+                "id": collection_id,
+            },
+        )
+
     def ProfileCometHeaderQuery(self, user_id: str) -> list[JSON]:
         return self.fetch(
             "ProfileCometHeaderQuery",

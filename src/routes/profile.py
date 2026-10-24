@@ -3,7 +3,7 @@ from flask.typing import ResponseReturnValue
 from werkzeug.utils import secure_filename
 
 from ..flask_utils import get_config
-from ..lib.extractor import get_profile, get_profile_photos, get_profile_videos
+from ..lib.extractor import get_profile, get_profile_events, get_profile_photos, get_profile_videos
 
 bp: Blueprint = Blueprint("profile", __name__)
 
@@ -45,3 +45,23 @@ def videos(username: str) -> ResponseReturnValue:
     feed, scroll = get_profile_videos(username, request.args.get("cursor"), proxy=get_config().proxy)
 
     return render_template("profile_media.html.jinja", feed=feed, scroll=scroll, title=f"{feed.name} · Videos", kind="videos")
+
+
+@bp.route("/<string:username>/events")
+@bp.route("/<string:username>/<any(upcoming_hosted_events, past_hosted_events):list_slug>")
+def events(username: str, list_slug: str | None = None) -> ResponseReturnValue:
+    feed, scroll = get_profile_events(
+        username,
+        list_slug or request.args.get("list"),
+        request.args.get("cursor"),
+        proxy=get_config().proxy,
+    )
+
+    return render_template(
+        "profile_media.html.jinja",
+        feed=feed,
+        scroll=scroll,
+        title=f"{feed.name} · Events",
+        kind="events",
+        current_list=list_slug or request.args.get("list") or (feed.lists[0][0] if feed.lists else None),
+    )

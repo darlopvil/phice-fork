@@ -1,5 +1,5 @@
 {% extends "timeline.html.jinja" %}
-{% from "macros.html.jinja" import media_grid %}
+{% from "macros.html.jinja" import media_grid, event_card %}
 {% from "context_macros.html.jinja" import navigation_buttons with context %}
 
 {% block head %}
@@ -8,8 +8,23 @@
 {% endblock head %}
 
 {% block feed %}
-    {% if feed.media %}
-        {{ media_grid(feed.media) }}
+    {% if feed.lists | length > 1 -%}
+        <nav class="profile_tabs">
+            {% for slug, name in feed.lists -%}
+                <a href="{{ url_for('profile.events', username=feed.token, list=slug or none) }}"><span
+                    class="profile_tab{{ ' active' if slug == current_list }}"
+                >{{ name }}</span></a>
+            {%- endfor %}
+        </nav>
+    {%- endif %}
+    {% if feed.media or feed.events %}
+        {% if kind == "events" %}
+            <div class="event_list">
+                {% for e in feed.events %}{{ event_card(e) }}{% endfor %}
+            </div>
+        {% else %}
+            {{ media_grid(feed.media) }}
+        {% endif %}
         {% if scroll.rate_limited %}
             <span class="centered card">Couldn't fetch the rest of the {{ kind }}: rate-limited.</span>
         {% endif %}

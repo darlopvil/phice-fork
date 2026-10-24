@@ -15,6 +15,7 @@ from .datatypes import JSON, Album, EventPage, Feed, Photo, Post, Scroll, Search
 from .exceptions import NetworkError, NotFoundError, ParsingError, ResponseError
 from .parsers import (
     parse_album_item,
+    parse_collection_event,
     parse_collection_media,
     parse_comment,
     parse_event,
@@ -48,8 +49,9 @@ ALBUM_PAGING: int = 3
 SEARCH_PAGING: int = 3
 MEDIA_PAGE: int = 24  # photos per page of a profile tab
 VIDEOS_PAGE: int = 12  # videos per page: their thumbnails are full size
+EVENTS_PAGE: int = 12
 # Facebook's ids for the apps behind profile sections, as found in their section tokens.
-PROFILE_SECTION_APPS: dict[str, str] = {"photos": "2305272732"}
+PROFILE_SECTION_APPS: dict[str, str] = {"photos": "2305272732", "events": "2344061033"}
 EXCLUDED_SHARE_HEADERS: list[str] = ["rdid", "share_url", "idorvanity"]
 
 # Everything fetched from Facebook is the same for every visitor, so it is cached
@@ -160,9 +162,9 @@ def _profile_header(api: Api, username: str) -> Feed:
     user_id: str = route["rootView"]["props"]["userID"]
 
     if (cached_header := HEADERS.get(("profile", user_id))) is not MISS:
-        return replace(cast("Feed", cached_header), posts=[], media=[])
+        return replace(cast("Feed", cached_header), posts=[], media=[], events=[], lists=[])
     feed, _ = _fetch_profile_header(api, user_id)
-    HEADERS.set(("profile", user_id), replace(feed, posts=[]), HEADER_TTL)
+    HEADERS.set(("profile", user_id), replace(feed, posts=[], media=[], events=[], lists=[]), HEADER_TTL)
     return feed
 
 
@@ -251,6 +253,76 @@ def get_profile_videos(username: str, cursor: str | None = None, *, proxy: str |
         feed.media.extend(parse_page_video(i["node"]) for i in connection["edges"])
         scroll.cursor = connection["page_info"]["end_cursor"]
         scroll.has_next = connection["page_info"]["has_next_page"]
+
+    return _cache_page(page_key, (feed, scroll), scroll)
+
+
+def _add_events(feed: Feed, connection: JSON, scroll: Scroll) -> None:
+    feed.events.extend(e for i in connection["edges"] if (e := parse_collection_event(i["node"])))
+    scroll.cursor = connection["page_info"]["end_cursor"]
+    scroll.has_next = connection["page_info"]["has_next_page"]
+
+
+@_guard
+def get_profile_events(
+    username: str,
+    list_slug: str | None = None,
+    cursor: str | None = None,
+    *,
+    proxy: str | None = None,
+) -> tuple[Feed, Scroll]:
+    page_key: tuple[str | None, ...] = ("profile_events", username, list_slug, cursor)
+    if (hit := PAGES.get(page_key)) is not MISS:
+        return cast("tuple[Feed, Scroll]", hit)
+
+    scroll: Scroll = Scroll(cursor)
+    with Api(proxy=proxy) as api:
+        feed: Feed = _profile_header(api, username)
+        # A profile's events come in lists ("Upcoming", "Past"...): (slug, name, collection id), the default first.
+        lists: list[tuple[str, str, str]]
+        first_page: JSON | None = None
+        cached_lists: object = HEADERS.get(("events_lists", feed.id))
+        if cached_lists is not MISS and (cursor or list_slug):
+            lists = cast("list[tuple[str, str, str]]", cached_lists)
+        else:
+            section: JSON = _profile_section(api, feed, "events") or {}
+            nav_collections: JSON = section.get("nav_collections") or {}
+            all_collections: JSON = section.get("all_collections") or {}
+            nav: list[JSON] = nav_collections.get("nodes") or []
+            lists = [(urlbasename(i["url"]), i["name"], i["id"]) for i in nav]
+            collections: list[JSON] = all_collections.get("nodes") or []
+            if collections:
+                collection: JSON = collections[0]["style_renderer"]["collection"]
+                if not any(i[2] == collection["id"] for i in lists):
+                    lists.insert(0, ("", collection.get("name") or "Events", collection["id"]))
+                first_page = collection
+            HEADERS.set(("events_lists", feed.id), lists, HEADER_TTL)
+        feed.lists = [(slug, name) for slug, name, _ in lists]
+        if not lists:
+            return _cache_page(page_key, (feed, Scroll(None)), scroll)
+
+        collection_id: str = lists[0][2]
+        if list_slug:
+            if (selected := next((i for i in lists if i[0] == list_slug), None)) is None:
+                raise NotFoundError(f"{feed.name} has no {list_slug} list")
+            collection_id = selected[2]
+        if not cursor and first_page is not None and first_page["id"] == collection_id:
+            _add_events(feed, first_page["pageItems"], scroll)
+        elif not cursor:
+            scroll.has_next = True  # the first page of another list: the pagination query without a cursor
+        with catch_rate_limit(scroll):
+            for _ in range(3):
+                if not scroll.has_next or len(feed.events) >= EVENTS_PAGE:
+                    break
+                _add_events(
+                    feed,
+                    api.ProfileCometAppCollectionEventsRendererPaginationQuery(
+                        collection_id,
+                        scroll.cursor,
+                        EVENTS_PAGE - len(feed.events),
+                    )[0]["data"]["node"]["pageItems"],
+                    scroll,
+                )
 
     return _cache_page(page_key, (feed, scroll), scroll)
 

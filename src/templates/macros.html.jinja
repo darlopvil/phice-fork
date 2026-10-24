@@ -48,6 +48,23 @@
     </div>
 {%- endmacro %}
 
+{% macro event_card(e) -%}
+    <article class="event_card card">
+        <a href="{{ url_for('events.events', token=e.id) }}">
+            {% if e.cover_photo is not none -%}
+                <img src="{{ e.cover_photo.url | proxy }}" alt="" />
+            {%- endif %}
+            <div class="event_card_text">
+                <span class="event_card_time">{{ "Canceled · " if e.is_canceled }}{{ e.time }}</span>
+                <b>{{ e.name }}</b>
+                {% if e.place -%}
+                    <span>{{ e.place }}{{ " · " + e.city if e.city and e.city not in e.place }}</span>
+                {%- endif %}
+            </div>
+        </a>
+    </article>
+{%- endmacro %}
+
 {% macro photo(node, cls="") -%}
     <a {% if node.id %}href="{{ url_for('posts.photo', fbid=node.id) }}"{% endif %}>
         <img
