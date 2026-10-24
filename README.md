@@ -85,6 +85,33 @@ Data fetched from Facebook is cached in memory and shared by all visitors, so re
 
 If Phice sits behind a reverse proxy that terminates TLS, set `trusted_proxies = 1` (one proxy) so the absolute URLs in RSS feeds use the scheme the visitor used. Pages always use relative URLs for media. Only `X-Forwarded-For` and `X-Forwarded-Proto` are trusted; the `Host` header is used as-is.
 
+## Keeping up with Facebook
+
+Phice talks to Facebook's internal GraphQL API with persisted query ids (`src/lib/data/doc_ids.json`) and Relay provider variables (`src/lib/data/extra_variables.json`). Facebook rotates them from time to time. When that happens, pages fail with "Facebook returned an error: <QueryName>: …" or "Facebook returned an unexpected response", and the log names the query that broke.
+
+Check whether they changed (writes nothing, exits with 1 if they did):
+
+```sh
+uv run python scripts/fetch_data.py --check
+```
+
+Update them, then restart Phice:
+
+```sh
+uv run python scripts/fetch_data.py
+```
+
+With Docker, run it in a throwaway container from the repository root, then rebuild:
+
+```sh
+docker compose run --rm --build --no-deps --user "$(id -u):$(id -g)" \
+  -v ./scripts:/src/phice/scripts:ro -v ./src/lib/data:/src/phice/src/lib/data \
+  phice python scripts/fetch_data.py
+docker compose up -d --build
+```
+
+The script loads a handful of public Facebook pages and their scripts (each script only once), so run it only when needed. Provider variables get the value Facebook's own provider modules return for a logged-out visitor, and none is ever removed, since queries that keep an older id may still need them. A query whose id can't be found keeps its current one. Before writing, the new data is checked with a few real queries (a profile, a post with comments, a search and a group), and nothing is written if any of them fails. Facebook serves a different set of scripts on each load, so a pass can miss some definitions: `--save-dump DIR` keeps what was downloaded and `--from-dump DIR` reads it back instead of contacting Facebook.
+
 ## License
 
 [AGPL-3.0](LICENSE), like the original project. If you run a modified version of this code as a network service, you must offer its source code to its users; the "Source code" link in the header and footer points to this repository.

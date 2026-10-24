@@ -32,6 +32,10 @@ class TTLCache:
             self._data.move_to_end(key)
             return value
 
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
     def set(self, key: Hashable, value: object, ttl: float) -> None:
         with self._lock:
             self._data[key] = (time.monotonic() + ttl, value)

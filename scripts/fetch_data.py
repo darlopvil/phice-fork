@@ -1,9 +1,37 @@
+"""Refresh the persisted GraphQL query ids (doc_ids) and Relay provider variables Phice needs.
+
+Facebook rotates them from time to time. Run from the repository root:
+
+    python scripts/fetch_data.py --check   # report changes, write nothing
+    python scripts/fetch_data.py           # update src/lib/data/*.json
+
+Facebook serves a different set of scripts on each load, so a pass can miss some definitions.
+--save-dump DIR keeps the downloaded pages and scripts, and --from-dump DIR reads them back
+instead of contacting Facebook, so a complete pass can be reused.
+
+Before writing, the new data is checked with a few real queries (a profile with its next page, a
+post with comments, a search and a group); nothing is written unless they all work.
+
+Exit codes: 0 up to date or updated, 1 changes found (--check only), 2 some query ids not found
+(their current ids are kept), 3 the new data failed the check (nothing written).
+"""
+
+import argparse
+import hashlib
+import json
 import re
 import sys
+import time
+from collections.abc import Iterator
+from contextlib import suppress
 from pathlib import Path
 
 import httpx
 import orjson
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.lib import api, extractor
+from src.lib.wrappers import http_client
 
 QUERY_NAMES: list[str] = [
     "CometAlbumPhotoCollagePaginationQuery",
@@ -25,6 +53,7 @@ QUERY_NAMES: list[str] = [
     "SearchCometResultsPaginatedResultsQuery",
     "CometFeedStoryMenuQuery",
 ]
+# Pages whose scripts define the queries above.
 URLS: list[str] = [
     "https://www.facebook.com/facebook",
     "https://www.facebook.com/facebook/posts/1193563419482343",
@@ -34,62 +63,226 @@ URLS: list[str] = [
     "https://www.facebook.com/photo/?fbid=10152716011096729&set=a.10152716010956729",
     "https://www.facebook.com/watch/search/?q=python",
 ]
-HEADERS: dict[str, str] = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Alt-Used": "www.facebook.com",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "same-origin",
-    "TE": "trailers",
-}
-DATA_PATH: Path = Path("src") / "lib" / "data"
+# Preloaded scripts, plus the ones the page loads directly.
+SCRIPT_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r'<link rel="preload" href="([^"]+)" as="script"'),
+    re.compile(r'<script\b[^>]*\bsrc="(https://[^"]+)"'),
+)
+PROVIDER_PREFIX: str = "__relay_internal__pv__"
+PROVIDER_RE: re.Pattern[str] = re.compile(r"__relay_internal__pv__(\w+)relayprovider\b")
+PROVIDER_MODULE_RE: re.Pattern[str] = re.compile(
+    # The body is read with a lookahead so it doesn't swallow the next module: providers are tiny and
+    # Facebook often bundles them back to back.
+    r'__d\("([\w$]+)\.relayprovider",\[[^\]]*\],\(?function\([^)]*\)\{(?=(.{0,300}))',
+    re.DOTALL,
+)
+GATEKEEPER_RE: re.Pattern[str] = re.compile(r'"(\d+)":\{"result":(true|false)')
+CONFIG_RE: re.Pattern[str] = re.compile(r'\["(\w+Config)",\[\],(\{[^{}]*\}),\d+\]')
+GK_CALL_RE: re.Pattern[str] = re.compile(r'r\("gkx"\)\("(\d+)"\)')
+DATA_PATH: Path = Path(__file__).resolve().parent.parent / "src" / "lib" / "data"
+PAUSE: float = 1.0  # between page loads, to stay gentle with Facebook
+
+type Value = bool | int | str
+
+
+def provider_value(body: str, gatekeepers: dict[str, bool], configs: dict[str, dict[str, object]]) -> Value:
+    """Value a Relay provider module returns for a logged-out visitor, read from its source.
+
+    Providers are tiny modules: a constant, a gatekeeper check (whose value Facebook embeds in
+    the page), a ternary picking a string or a number, or a config flag. Anything else is false.
+    """
+    expr: str = (body.split("return", 1)[1] if "return" in body else body).split("}", 1)[0].strip().rstrip(";")
+    gk_call: re.Match[str] | None = GK_CALL_RE.search(expr)
+    gk: bool = bool(gk_call and gatekeepers.get(gk_call.group(1)))
+    if "," in expr and expr.endswith("!0"):
+        return True
+    if choice := re.search(r'\?"(\w+)":"(\w+)"', expr):
+        return choice.group(1) if gk else choice.group(2)
+    if choice := re.search(r"\?(-?\d+):(-?\d+)", expr):
+        return int(choice.group(1) if gk else choice.group(2))
+    if expr in ("!0", "!1"):
+        return expr == "!0"
+    if expr.startswith('!r("gkx")'):
+        return not gk
+    if gk_call:
+        return gk
+    if config := re.search(r'r\("(\w+)"\)\.(\w+)', expr):
+        return bool(configs.get(config.group(1), {}).get(config.group(2), False))
+    return False
+
+
+def download(client: httpx.Client, save_to: Path | None) -> Iterator[tuple[str, str]]:
+    """Yield ("page", html) and ("script", js) from Facebook, each script once."""
+    seen_scripts: set[str] = set()
+    for i, url in enumerate(URLS):
+        page: httpx.Response = client.get(url)
+        if save_to:
+            (save_to / f"page{i}.html").write_text(page.text)
+        found: list[str] = [s for pattern in SCRIPT_RES for s in pattern.findall(page.text)]
+        scripts: list[str] = list(dict.fromkeys(s for s in found if s not in seen_scripts))
+        print(f"  {url} -> HTTP {page.status_code}, {len(scripts)} new scripts", file=sys.stderr)
+        yield "page", page.text
+        for script in scripts:
+            seen_scripts.add(script)
+            text: str = client.get(script).text
+            if save_to:
+                (save_to / f"js_{hashlib.sha1(script.encode(), usedforsecurity=False).hexdigest()[:12]}.js").write_text(text)
+            yield "script", text
+        time.sleep(PAUSE)
+
+
+def read_dump(path: Path) -> Iterator[tuple[str, str]]:
+    """Yield the pages and scripts saved by --save-dump."""
+    pages: list[Path] = sorted(path.glob("page*.html"))
+    scripts: list[Path] = sorted(path.glob("js_*.js"))
+    print(f"  {path}: {len(pages)} pages, {len(scripts)} scripts", file=sys.stderr)
+    for p in pages:
+        yield "page", p.read_text(errors="replace")
+    for p in scripts:
+        yield "script", p.read_text(errors="replace")
+
+
+def collect(sources: Iterator[tuple[str, str]]) -> tuple[dict[str, int], dict[str, Value], set[str]]:
+    doc_ids: dict[str, int] = {}
+    used: set[str] = set()
+    modules: dict[str, str] = {}
+    gatekeepers: dict[str, bool] = {}
+    configs: dict[str, dict[str, object]] = {}
+    id_patterns: dict[str, re.Pattern[str]] = {
+        name: re.compile(rf'__d\("{name}_facebookRelayOperation",[^\n]*?exports="([0-9]+)"') for name in QUERY_NAMES
+    }
+
+    for kind, text in sources:
+        if kind == "page":
+            gatekeepers.update((k, v == "true") for k, v in GATEKEEPER_RE.findall(text))
+            for name, obj in CONFIG_RE.findall(text):
+                with suppress(ValueError):
+                    configs[name] = json.loads(obj)
+            continue
+        for name, pattern in id_patterns.items():
+            if name not in doc_ids and (match := pattern.search(text)):
+                doc_ids[name] = int(match.group(1))
+        used.update(PROVIDER_RE.findall(text))
+        modules.update(PROVIDER_MODULE_RE.findall(text))
+
+    # Facebook doesn't serve the same scripts on every load, so a provider can be used by a query
+    # whose definition wasn't downloaded this time: it is still returned, without a value.
+    providers: dict[str, Value] = {
+        f"{PROVIDER_PREFIX}{name}relayprovider": provider_value(modules[name], gatekeepers, configs)
+        for name in sorted(used)
+        if name in modules
+    }
+    unknown: set[str] = {f"{PROVIDER_PREFIX}{name}relayprovider" for name in used if name not in modules}
+    print(f"  {len(used)} provider variables seen, {len(providers)} with a known value", file=sys.stderr)
+    return doc_ids, providers, unknown
+
+
+def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
+    """Run a few real queries with the candidate data; return what failed."""
+    saved: tuple[dict[str, int], dict[str, Value]] = (dict(api.DOC_IDS), dict(api.EXTRA_VARIABLES))
+    api.DOC_IDS.clear()
+    api.DOC_IDS.update(doc_ids)
+    api.EXTRA_VARIABLES.clear()
+    api.EXTRA_VARIABLES.update(providers)
+    failures: list[str] = []
+    try:
+        for label, fn, args in (
+            ("profile", extractor.get_profile, ("facebook",)),
+            ("post comments", extractor.get_post, ("1193563419482343", None, None, "newest")),
+            ("search", extractor.get_search, ("python", "pages")),
+            ("group", extractor.get_group, ("python",)),
+        ):
+            for cache in (extractor.HEADERS, extractor.PAGES):
+                cache.clear()
+            try:
+                result, scroll = fn(*args)
+            except Exception as e:
+                print(f"  check {label}: FAILED ({e})", file=sys.stderr)
+                failures.append(f"{label}: {e}")
+            else:
+                count: int = len(getattr(result, "posts", None) or getattr(result, "comments", None) or result)
+                print(f"  check {label}: {count} items{' (rate limited)' if scroll.rate_limited else ''}", file=sys.stderr)
+                if not count:
+                    failures.append(f"{label}: no items")
+            time.sleep(PAUSE)
+    finally:
+        api.DOC_IDS.clear()
+        api.DOC_IDS.update(saved[0])
+        api.EXTRA_VARIABLES.clear()
+        api.EXTRA_VARIABLES.update(saved[1])
+    return failures
+
+
+def merge[T](old: dict[str, T], new: dict[str, T], names: list[str] | None = None) -> dict[str, T]:
+    """New values over old ones, keeping the old file's order and every old entry."""
+    order: list[str] = [k for k in old if names is None or k in names] + [k for k in (names or new) if k not in old]
+    return {k: new.get(k, old.get(k)) for k in order if k in new or k in old}  # pyright: ignore[reportReturnType]
+
+
+def report(label: str, old: dict[str, Value], new: dict[str, Value]) -> bool:
+    changed: list[str] = [k for k in new if k in old and old[k] != new[k]]
+    added: list[str] = [k for k in new if k not in old]
+    print(f"{label}: {len(changed)} changed, {len(added)} new")
+    for k in changed:
+        print(f"  ~ {k.removeprefix(PROVIDER_PREFIX)}: {old[k]!r} -> {new[k]!r}")
+    for k in added:
+        print(f"  + {k.removeprefix(PROVIDER_PREFIX)}: {new[k]!r}")
+    return bool(changed or added)
 
 
 def main() -> int:
-    doc_ids: dict[str, int] = {}
-    extra_vars: dict[str, int] = {}
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--check", action="store_true", help="report changes without writing anything")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--save-dump", type=Path, metavar="DIR", help="also save the downloaded pages and scripts")
+    source.add_argument("--from-dump", type=Path, metavar="DIR", help="read pages and scripts saved by --save-dump")
+    args = parser.parse_args()
 
-    with httpx.Client(headers=HEADERS) as client:
-        for url in URLS:
-            html_res: httpx.Response = client.get(url)
-            scripts_urls: list[str] = re.findall(r'<link rel="preload" href="(.*)" as="script"', html_res.text)
+    if args.from_dump:
+        doc_ids, providers, unknown = collect(read_dump(args.from_dump))
+    else:
+        if args.save_dump:
+            args.save_dump.mkdir(parents=True, exist_ok=True)
+        with http_client(follow_redirects=True) as client:
+            doc_ids, providers, unknown = collect(download(client, args.save_dump))
 
-            for script in scripts_urls:
-                script_res: httpx.Response = client.get(script)
-                script_cont: str = script_res.text
+    old_ids: dict[str, int] = orjson.loads((DATA_PATH / "doc_ids.json").read_bytes())
+    old_providers: dict[str, Value] = orjson.loads((DATA_PATH / "extra_variables.json").read_bytes())
 
-                for name in QUERY_NAMES.copy():
-                    id_match: re.Match[str] | None = re.search(
-                        rf'^__d\("{name}_facebookRelayOperation",.*exports="([0-9]+)"',
-                        script_cont,
-                        re.MULTILINE,
-                    )
-                    if id_match:
-                        doc_ids[name] = int(id_match.group(1))
-                        QUERY_NAMES.remove(name)
+    # A query whose module isn't loaded by these pages keeps its current id. Provider variables are
+    # never dropped either: queries that still use an older id may still require them.
+    missing: list[str] = [name for name in QUERY_NAMES if name not in doc_ids]
+    if missing:
+        print("Not found in Facebook's scripts, current ids kept:", *missing, file=sys.stderr)
+    new_ids: dict[str, int] = merge(old_ids, doc_ids, QUERY_NAMES)
+    # Providers whose definition wasn't downloaded keep their current value, or default to false.
+    new_providers: dict[str, Value] = merge(
+        old_providers, providers | {k: old_providers.get(k, False) for k in unknown - providers.keys()}
+    )
+    if guessed := sorted(k for k in unknown if k not in old_providers and k not in providers):
+        print(
+            "Provider definitions not found, defaulting to false:",
+            *(k.removeprefix(PROVIDER_PREFIX) for k in guessed),
+            file=sys.stderr,
+        )
 
-                extra_variables_matches: list[str] = re.findall(
-                    r'__relay_internal__pv__.+?provider',
-                    script_cont,
-                    re.MULTILINE,
-                )
-                for var in extra_variables_matches:
-                    extra_vars[var] = 0
+    ids_differ: bool = report("doc_ids", dict(old_ids), dict(new_ids))
+    providers_differ: bool = report("extra_variables", old_providers, new_providers)
 
-    if QUERY_NAMES:
-        print("Failed to fetch ids for:", *QUERY_NAMES, file=sys.stderr)
-        return 1
+    if not args.check:
+        if not ids_differ and not providers_differ:
+            print("Already up to date.")
+        elif failures := verify(new_ids, new_providers):
+            print("The new data failed the check, nothing was written:", *failures, sep="\n  ")
+            return 3
+        else:
+            (DATA_PATH / "doc_ids.json").write_bytes(orjson.dumps(new_ids, option=orjson.OPT_INDENT_2))
+            (DATA_PATH / "extra_variables.json").write_bytes(orjson.dumps(new_providers, option=orjson.OPT_INDENT_2))
+            print("Data files updated.")
 
-    with (DATA_PATH / "doc_ids.json").open("w") as f:
-        f.write(orjson.dumps(doc_ids, option=orjson.OPT_INDENT_2).decode())
-
-    with (DATA_PATH / "extra_variables.json").open("w") as f:
-        f.write(orjson.dumps(extra_vars, option=orjson.OPT_INDENT_2).decode())
-
-    return 0
+    if missing:
+        return 2
+    return 1 if args.check and (ids_differ or providers_differ) else 0
 
 
 if __name__ == "__main__":
