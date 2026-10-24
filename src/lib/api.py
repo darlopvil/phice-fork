@@ -256,6 +256,21 @@ class Api:
             },
         )
 
+    def PagesCometChannelTabAllVideosCardImplPaginationQuery(self, page_id: str, cursor: str | None, count: int) -> list[JSON]:
+        return self.fetch(
+            "PagesCometChannelTabAllVideosCardImplPaginationQuery",
+            {
+                "alwaysIncludeAudioRooms": False,
+                "count": count,
+                "cursor": cursor,
+                "pageID": page_id,
+                "scale": 1,
+                "showReactions": True,
+                "useDefaultActor": False,
+                "id": page_id,
+            },
+        )
+
     def ProfileCometHeaderQuery(self, user_id: str) -> list[JSON]:
         return self.fetch(
             "ProfileCometHeaderQuery",

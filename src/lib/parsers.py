@@ -350,6 +350,21 @@ def parse_collection_media(item: JSON, owner_id: str) -> Photo | Video | None:
             return None
 
 
+def parse_page_video(node: JSON) -> Video:
+    """A video from a Page's videos tab, with its title and duration when Facebook gives them."""
+    video: JSON = node["channel_tab_thumbnail_renderer"]["video"]
+    title: object = _dig(video, "savable_title", "text")
+    duration: object = _dig(video, "video_thumbnail_overlays_renderer", "video", "playable_duration")
+    return Video(
+        id=node["id"],
+        url=None,
+        owner_id=node["owner"]["id"],
+        thumbnail_url=video["image"]["uri"],
+        title=title if isinstance(title, str) and title else None,
+        duration=duration if isinstance(duration, int) else None,
+    )
+
+
 def _dig(obj: object, *keys: str) -> object:
     """obj[k1][k2]..., or None as soon as a key is missing or a value is null."""
     for key in keys:

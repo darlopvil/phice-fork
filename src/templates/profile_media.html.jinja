@@ -11,10 +11,10 @@
     {% if feed.media %}
         {{ media_grid(feed.media) }}
         {% if scroll.rate_limited %}
-            <span class="centered card">Couldn't fetch the rest of the photos: rate-limited.</span>
+            <span class="centered card">Couldn't fetch the rest of the {{ kind }}: rate-limited.</span>
         {% endif %}
         {{ navigation_buttons() }}
     {% else %}
-        <span class="card centered">No photos.</span>
+        <span class="card centered">No {{ kind }}.</span>
     {% endif %}
 {% endblock feed %}

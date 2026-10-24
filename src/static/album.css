@@ -23,6 +23,18 @@
     width: 100%;
 }
 
+.media_item > a > .media_duration {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: auto;
+    padding: 0 4px;
+    border-radius: 4px;
+    background-color: rgb(0 0 0 / 70%);
+    color: white;
+    font-size: 0.8rem;
+}
+
 .media_item > a > .icon {
     position: absolute;
     top: 50%;

@@ -13,7 +13,15 @@ from .api import API_ERROR_CODES, Api
 from .cache import MISS, TTLCache
 from .datatypes import JSON, Album, EventPage, Feed, Photo, Post, Scroll, SearchItem, User
 from .exceptions import NetworkError, NotFoundError, ParsingError, ResponseError
-from .parsers import parse_album_item, parse_collection_media, parse_comment, parse_event, parse_post, parse_search
+from .parsers import (
+    parse_album_item,
+    parse_collection_media,
+    parse_comment,
+    parse_event,
+    parse_page_video,
+    parse_post,
+    parse_search,
+)
 from .utils import base64s, catch_rate_limit, network_name, unwrap_link, urlbasename
 from .wrappers import http_client
 
@@ -39,6 +47,7 @@ GROUP_PAGING: int = 4
 ALBUM_PAGING: int = 3
 SEARCH_PAGING: int = 3
 MEDIA_PAGE: int = 24  # photos per page of a profile tab
+VIDEOS_PAGE: int = 12  # videos per page: their thumbnails are full size
 # Facebook's ids for the apps behind profile sections, as found in their section tokens.
 PROFILE_SECTION_APPS: dict[str, str] = {"photos": "2305272732"}
 EXCLUDED_SHARE_HEADERS: list[str] = ["rdid", "share_url", "idorvanity"]
@@ -215,6 +224,37 @@ def get_profile_photos(username: str, cursor: str | None = None, *, proxy: str |
     return _cache_page(page_key, (feed, scroll), scroll)
 
 
+@_guard
+def get_profile_videos(username: str, cursor: str | None = None, *, proxy: str | None = None) -> tuple[Feed, Scroll]:
+    page_key: tuple[str | None, ...] = ("profile_videos", username, cursor)
+    if (hit := PAGES.get(page_key)) is not MISS:
+        return cast("tuple[Feed, Scroll]", hit)
+
+    scroll: Scroll = Scroll(cursor)
+    with Api(proxy=proxy) as api:
+        feed: Feed = _profile_header(api, username)
+        if not feed.page_id:
+            # Only Pages have a videos tab Facebook shows logged-out visitors.
+            return _cache_page(page_key, (feed, Scroll(None)), scroll)
+        connection: JSON
+        try:
+            response: list[JSON] = api.PagesCometChannelTabAllVideosCardImplPaginationQuery(feed.page_id, cursor, VIDEOS_PAGE)
+            connection = response[0]["data"]["node"]["all_videos"]
+        except ResponseError as e:
+            if e.code != API_ERROR_CODES["rate_limit"] or cursor:
+                raise
+            parts: list[JSON] = api.query_from_html(f"{feed.token}/videos").get("CometProfilePlusVideosRootQuery") or []
+            found: JSON | None = next((i["data"]["all_videos"] for i in parts if "all_videos" in (i.get("data") or {})), None)
+            if found is None:
+                raise
+            connection = found
+        feed.media.extend(parse_page_video(i["node"]) for i in connection["edges"])
+        scroll.cursor = connection["page_info"]["end_cursor"]
+        scroll.has_next = connection["page_info"]["has_next_page"]
+
+    return _cache_page(page_key, (feed, scroll), scroll)
+
+
 def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
     """Fetch and parse everything above the posts; also return the first feed query for page 1."""
     header_query: list[JSON]
@@ -248,6 +288,13 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
 
     if private := header["wem_private_sharing_bundle"]["private_sharing_control_model_for_user"]:
         feed.is_private = private["private_sharing_enabled"]
+
+    tabs: JSON = header.get("profile_tabs") or {}
+    profile_user: JSON = tabs.get("profile_user") or {}
+    posts_user: JSON = posts_feed[0]["data"]["user"]
+    delegate_page: JSON | None = profile_user.get("delegate_page") or posts_user.get("delegate_page")
+    if delegate_page:
+        feed.page_id = delegate_page.get("id")
 
     if header["profilePhoto"] and header["profilePicLarge"]:
         feed.profile_photo = Photo(

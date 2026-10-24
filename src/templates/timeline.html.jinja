@@ -58,7 +58,7 @@
         <section id="timeline_feed">
             {% if not feed.is_group -%}
                 <nav class="profile_tabs">
-                    {% for endpoint, label in (("profile.profile", "Posts"), ("profile.photos", "Photos")) -%}
+                    {% for endpoint, label in (("profile.profile", "Posts"), ("profile.photos", "Photos"), ("profile.videos", "Videos")) -%}
                         <a href="{{ url_for(endpoint, username=feed.token) }}"><span
                             class="profile_tab{{ ' active' if request.endpoint == endpoint or (endpoint == 'profile.profile' and request.endpoint == 'profile.profile_php') }}"
                         >{{ label }}</span></a>

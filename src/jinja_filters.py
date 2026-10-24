@@ -62,10 +62,17 @@ def format_number(number: int) -> str:
     return f"{number:,}"
 
 
+def format_duration(seconds: int) -> str:
+    minutes, seconds = divmod(int(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}:{minutes:02}:{seconds:02}" if hours else f"{minutes}:{seconds:02}"
+
+
 FILTERS: dict[str, Callable[..., str]] = {
     "format_time": format_time,
     "format_time_full": format_time_full,
     "format_time_rfc822": format_time_rfc822,
     "format_number": format_number,
+    "format_duration": format_duration,
     "proxy": proxy,
 }

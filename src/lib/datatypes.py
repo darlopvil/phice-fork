@@ -36,6 +36,8 @@ class Video:
     url: str | None
     owner_id: str | None = None
     thumbnail_url: str | None = None
+    title: str | None = None
+    duration: int | None = None  # seconds
 
 
 @dataclass(kw_only=True)
@@ -153,6 +155,7 @@ class Feed:
     members: str | None = None
     is_group: bool = False
     is_private: bool = False
+    page_id: str | None = None  # the Page behind a profile, if it is one
     info: list[dict[str, str | None]] = field(default_factory=list)
     posts: list[Post] = field(default_factory=list)
     media: list[AlbumItem] = field(default_factory=list)

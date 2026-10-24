@@ -11,7 +11,7 @@ instead of contacting Facebook, so a complete pass can be reused.
 
 Before writing, the new data is checked with a few real queries (a profile with its next page, a
 post with comments, a photo post with its full-size photo, a search, a group, an event and a profile's
-photos); nothing is written unless they all work.
+photos and videos); nothing is written unless they all work.
 
 Exit codes: 0 up to date or updated, 1 changes found (--check only), 2 some query ids not found
 (their current ids are kept), 3 the new data failed the check (nothing written).
@@ -59,6 +59,7 @@ QUERY_NAMES: list[str] = [
     "PublicEventCometAboutRootQuery",
     "ProfileCometTopAppSectionQuery",
     "ProfileCometAppCollectionPhotosRendererPaginationQuery",
+    "PagesCometChannelTabAllVideosCardImplPaginationQuery",
 ]
 # Pages whose scripts define the queries above.
 URLS: list[str] = [
@@ -71,6 +72,7 @@ URLS: list[str] = [
     "https://www.facebook.com/watch/search/?q=python",
     "https://www.facebook.com/events/2088317415270457",
     "https://www.facebook.com/facebook/photos",
+    "https://www.facebook.com/facebook/videos",
 ]
 # Preloaded scripts, plus the ones the page loads directly.
 SCRIPT_RES: tuple[re.Pattern[str], ...] = (
@@ -216,6 +218,7 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
             ("group", extractor.get_group, ("python",)),
             ("event", extractor.get_event, ("2088317415270457",)),
             ("profile photos", extractor.get_profile_photos, ("facebook",)),
+            ("profile videos", extractor.get_profile_videos, ("facebook",)),
         ):
             for cache in (extractor.HEADERS, extractor.PAGES):
                 cache.clear()
