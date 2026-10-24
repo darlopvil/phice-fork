@@ -44,7 +44,7 @@ def create_app(config_file: Path | None) -> Flask:
     app.jinja_env.filters.update(FILTERS)
     app.jinja_env.globals.update(GLOBALS)
 
-    for route in ("albums", "cdn", "error", "groups", "home", "posts", "profile", "search", "settings", "share"):
+    for route in ("albums", "cdn", "error", "events", "groups", "home", "posts", "profile", "search", "settings", "share"):
         app.register_blueprint(import_module(f".routes.{route}", __name__).bp)
 
     return app

@@ -48,6 +48,7 @@ class Event:
     title: str
     time: str
     description: str | None = None
+    id: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -162,6 +163,25 @@ class Album:
     title: str
     description: str = ""
     items: list[AlbumItem] = field(default_factory=list)
+
+
+@dataclass(kw_only=True)
+class EventPage:
+    id: str
+    name: str
+    time: str  # Facebook's own sentence, in the event's time zone
+    start_time: int = 0
+    duration: str | None = None
+    place: str | None = None
+    city: str | None = None
+    is_online: bool = False
+    is_canceled: bool = False
+    is_past: bool = False
+    cover_photo: Photo | None = None
+    hosts: list[User] = field(default_factory=list)
+    responded: int | None = None
+    description: str = ""
+    ticket_url: str | None = None
 
 
 type SearchItem = User | Post

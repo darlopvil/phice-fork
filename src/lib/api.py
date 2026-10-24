@@ -208,6 +208,26 @@ class Api:
     def __exit__(self, typ: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
         self.close()
 
+    def EventCometPermalinkHeaderQuery(self, event_id: str) -> list[JSON]:
+        return self.fetch(
+            "EventCometPermalinkHeaderQuery",
+            {
+                "eventID": event_id,
+                "isCrawler": False,
+                "scale": 1,
+            },
+        )
+
+    def PublicEventCometAboutRootQuery(self, event_id: str) -> list[JSON]:
+        return self.fetch(
+            "PublicEventCometAboutRootQuery",
+            {
+                "eventID": event_id,
+                "isLoggedOut": True,
+                "scale": 1,
+            },
+        )
+
     def ProfileCometHeaderQuery(self, user_id: str) -> list[JSON]:
         return self.fetch(
             "ProfileCometHeaderQuery",

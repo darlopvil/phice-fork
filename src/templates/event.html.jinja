@@ -1,0 +1,55 @@
+{% extends "base.html.jinja" %}
+{% from "macros.html.jinja" import icon, photo, expandable, message %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='event.css') }}" />
+{% endblock head %}
+
+{% block content %}
+    {% if event.cover_photo is not none -%}
+        <div class="event_cover">{{ photo(event.cover_photo) }}</div>
+    {%- endif %}
+    <section id="event" class="card">
+        <div id="event_header">
+            <span class="event_time" title="{{ event.start_time | format_time_full if event.start_time }}">{{ event.time }}</span>
+            <h1>{{ event.name }}</h1>
+        </div>
+        {% if event.is_canceled -%}
+            {{ message("This event was canceled.", "triangle-exclamation") }}
+        {%- elif event.is_past -%}
+            {{ message("This event has ended.", "clock") }}
+        {%- endif %}
+        <div class="event_rows">
+            {% if event.is_online -%}
+                <span>{{ icon("location") }} Online event</span>
+            {%- elif event.place -%}
+                <span>{{ icon("location") }} {{ event.place }}{{ " · " + event.city if event.city and event.city not in event.place }}</span>
+            {%- endif %}
+            {% if event.duration -%}
+                <span>{{ icon("clock") }} Duration: {{ event.duration }}</span>
+            {%- endif %}
+            {% if event.responded is not none -%}
+                <span>{{ icon("circle-check") }} {{ event.responded | format_number }} people responded</span>
+            {%- endif %}
+            {% if event.ticket_url -%}
+                <a href="{{ event.ticket_url }}" rel="noreferrer nofollow"><span>{{ icon("link") }} Tickets</span></a>
+            {%- endif %}
+        </div>
+        {% if event.hosts -%}
+            <div class="event_hosts">
+                {% for host in event.hosts -%}
+                    <span class="event_host">
+                        <a href="{{ url_for('profile.profile', username=host.username) }}">
+                            <img src="{{ host.picture_url | proxy }}" alt="{{ host.name }}'s profile picture" />
+                            <span>{{ host.name }}</span>
+                        </a>{{ icon("circle-check") if host.verified }}
+                    </span>
+                {%- endfor %}
+            </div>
+        {%- endif %}
+        {% if event.description -%}
+            <hr />
+            <div class="event_description" dir="auto">{{ expandable(event.description) }}</div>
+        {%- endif %}
+    </section>
+{% endblock content %}

@@ -1,7 +1,7 @@
 import base64
 from collections.abc import Generator
 from contextlib import contextmanager
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .api import API_ERROR_CODES
 from .datatypes import Scroll
@@ -18,6 +18,13 @@ def base64s_decode(s: str) -> str:
 
 def urlbasename(url: str) -> str:
     return list(filter(None, urlparse(url).path.split("/")))[-1]
+
+
+def unwrap_link(url: str) -> str:
+    """The destination of a link wrapped in Facebook's l.facebook.com redirector."""
+    if url.startswith("https://l.facebook.com/l.php"):
+        return parse_qs(urlparse(url).query).get("u", [url])[0]
+    return url
 
 
 # Networks profiles commonly link to, by domain (subdomains included).

@@ -1,4 +1,5 @@
 from contextlib import suppress
+from typing import cast
 
 from .datatypes import (
     JSON,
@@ -8,6 +9,7 @@ from .datatypes import (
     AttachmentAlbum,
     Comment,
     Event,
+    EventPage,
     Group,
     Photo,
     Poll,
@@ -20,7 +22,7 @@ from .datatypes import (
     Video,
 )
 from .exceptions import ParsingError
-from .utils import base64s_decode, urlbasename
+from .utils import base64s_decode, unwrap_link, urlbasename
 
 REACTIONS_IDS: dict[str, str] = {
     "1635855486666999": "like",
@@ -122,6 +124,7 @@ def parse_attachments(style: JSON) -> Attachment:
                 title=attachment["target"]["name"],
                 time=attachment["target"]["capitalized_day_time_sentence"],
                 description=attachment["description"]["text"],
+                id=attachment["target"].get("id"),
             )
         case "TextPoll":
             poll_nodes: list[JSON] = attachment["target"]["orderedOptions"]["nodes"]
@@ -332,3 +335,61 @@ def parse_album_item(node: JSON) -> Photo | Video:
             )
         case _:
             raise ParsingError(f"Unknown album item type {node['__typename']}")
+
+
+def _dig(obj: object, *keys: str) -> object:
+    """obj[k1][k2]..., or None as soon as a key is missing or a value is null."""
+    for key in keys:
+        if not isinstance(obj, dict):
+            return None
+        obj = cast("JSON", obj).get(key)
+    return obj
+
+
+def parse_event(header: JSON, about: JSON) -> EventPage:
+    """An event page from its header and "About" queries. Only the name and date are required."""
+    event: EventPage = EventPage(
+        id=header["id"],
+        name=header["name"],
+        time=header["day_time_sentence"],
+        start_time=header.get("start_timestamp") or 0,
+        duration=about.get("display_duration") or None,
+        is_online=bool(header.get("is_online")),
+        is_canceled=bool(header.get("is_canceled")),
+        is_past=bool(header.get("is_past")),
+    )
+    if place := about.get("event_place") or header.get("event_place"):
+        event.place = place.get("contextual_name") or place.get("name")
+    if isinstance(city := _dig(about, "location", "reverse_geocode", "city_page", "name"), str):
+        event.city = city
+    photo: JSON = cast("JSON", _dig(header, "cover_media_renderer", "cover_photo", "photo") or {})
+    if image := _dig(photo, "full_image", "uri"):
+        event.cover_photo = Photo(url=str(image), id=photo.get("id"), alt_text=photo.get("accessibility_caption") or "")
+    hosts: list[JSON] = about.get("event_hosts_that_can_view_guestlist") or []
+    for host in hosts:
+        url: str = host.get("url") or ""
+        event.hosts.append(
+            User(
+                id=host["id"],
+                username=urlbasename(url) if url and "profile.php" not in url else host["id"],
+                name=host["name"],
+                picture_url=str(_dig(host, "profile_picture", "uri") or ""),
+                verified=bool(host.get("is_verified")),
+            )
+        )
+    responded: object = _dig(
+        about,
+        "can_view_attendance_context_row",
+        "event",
+        "context_row_attendance_renderer",
+        "event",
+        "event_connected_users_public_responded",
+        "count",
+    )
+    if isinstance(responded, int):
+        event.responded = responded
+    if isinstance(description := _dig(about, "event_description", "text"), str):
+        event.description = description
+    if ticket_url := about.get("event_buy_ticket_url"):
+        event.ticket_url = unwrap_link(ticket_url)
+    return event

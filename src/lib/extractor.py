@@ -11,10 +11,10 @@ import orjson
 
 from .api import API_ERROR_CODES, Api
 from .cache import MISS, TTLCache
-from .datatypes import JSON, Album, Feed, Photo, Post, Scroll, SearchItem, User
+from .datatypes import JSON, Album, EventPage, Feed, Photo, Post, Scroll, SearchItem, User
 from .exceptions import NetworkError, NotFoundError, ParsingError, ResponseError
-from .parsers import parse_album_item, parse_comment, parse_post, parse_search
-from .utils import base64s, catch_rate_limit, network_name, urlbasename
+from .parsers import parse_album_item, parse_comment, parse_event, parse_post, parse_search
+from .utils import base64s, catch_rate_limit, network_name, unwrap_link, urlbasename
 from .wrappers import http_client
 
 COMMENT_FILTERS: defaultdict[str | None, str] = defaultdict(
@@ -219,10 +219,7 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
                         item["text"] += f" {subtitle['text']}"
                     if ranges := context_item_title["ranges"]:
                         url: str | None = ranges[0]["entity"]["url"]
-                        if url and url.startswith("https://l.facebook.com/l.php"):
-                            item["url"] = parse_qs(urlparse(url).query)["u"][0]
-                        else:
-                            item["url"] = url
+                        item["url"] = unwrap_link(url) if url else url
             item["type"] = i["node"]["timeline_context_item"]["timeline_context_list_item_type"][11:].lower()
             if item["type"] == "other_account" and item["url"]:
                 # Facebook only gives the username, so the network comes from the link.
@@ -503,6 +500,37 @@ def get_album(token: str, cursor: str | None = None, *, proxy: str | None = None
                         break
 
     return _cache_page(page_key, (album, scroll), scroll)
+
+
+@_guard
+def get_event(event_id: str, *, proxy: str | None = None) -> EventPage:
+    page_key: tuple[str | None, ...] = ("event", event_id)
+    if (hit := PAGES.get(page_key)) is not MISS:
+        return cast("EventPage", hit)
+
+    header_query: list[JSON]
+    about_query: list[JSON]
+    with Api(proxy=proxy) as api:
+        try:
+            header_query = api.EventCometPermalinkHeaderQuery(event_id)
+            about_query = api.PublicEventCometAboutRootQuery(event_id)
+        except ResponseError as e:
+            if e.code != API_ERROR_CODES["rate_limit"]:
+                raise
+            html_query = api.query_from_html(f"events/{event_id}")
+            if "EventCometPermalinkHeaderQuery" not in html_query or "PublicEventCometAboutRootQuery" not in html_query:
+                raise
+            header_query = html_query["EventCometPermalinkHeaderQuery"]
+            about_query = html_query["PublicEventCometAboutRootQuery"]
+
+    header: JSON | None = header_query[0]["data"].get("event")
+    about: JSON | None = about_query[0]["data"].get("event")
+    if not header or not about:
+        raise NotFoundError("Event not found (it may be private or deleted)")
+
+    event: EventPage = parse_event(header, about)
+    PAGES.set(page_key, event, PAGE_TTL)
+    return event
 
 
 @_guard

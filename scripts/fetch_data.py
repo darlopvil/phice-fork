@@ -10,8 +10,8 @@ Facebook serves a different set of scripts on each load, so a pass can miss some
 instead of contacting Facebook, so a complete pass can be reused.
 
 Before writing, the new data is checked with a few real queries (a profile with its next page, a
-post with comments, a photo post with its full-size photo, a search and a group); nothing is written
-unless they all work.
+post with comments, a photo post with its full-size photo, a search, a group and an event); nothing is
+written unless they all work.
 
 Exit codes: 0 up to date or updated, 1 changes found (--check only), 2 some query ids not found
 (their current ids are kept), 3 the new data failed the check (nothing written).
@@ -26,12 +26,14 @@ import time
 from collections.abc import Iterator
 from contextlib import suppress
 from pathlib import Path
+from typing import Any, cast
 
 import httpx
 import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.lib import api, extractor
+from src.lib.datatypes import EventPage, Scroll
 from src.lib.wrappers import http_client
 
 QUERY_NAMES: list[str] = [
@@ -53,6 +55,8 @@ QUERY_NAMES: list[str] = [
     "ProfilePlusCometLoggedOutRootQuery",
     "SearchCometResultsPaginatedResultsQuery",
     "CometFeedStoryMenuQuery",
+    "EventCometPermalinkHeaderQuery",
+    "PublicEventCometAboutRootQuery",
 ]
 # Pages whose scripts define the queries above.
 URLS: list[str] = [
@@ -63,6 +67,7 @@ URLS: list[str] = [
     "https://www.facebook.com/media/set/?set=a.10152716010956729",
     "https://www.facebook.com/photo/?fbid=10152716011096729&set=a.10152716010956729",
     "https://www.facebook.com/watch/search/?q=python",
+    "https://www.facebook.com/events/2088317415270457",
 ]
 # Preloaded scripts, plus the ones the page loads directly.
 SCRIPT_RES: tuple[re.Pattern[str], ...] = (
@@ -178,6 +183,19 @@ def collect(sources: Iterator[tuple[str, str]]) -> tuple[dict[str, int], dict[st
     return doc_ids, providers, unknown
 
 
+def describe(label: str, result: object) -> tuple[str, bool]:
+    """One-line summary of a check's result, and whether it passed."""
+    if isinstance(result, EventPage):
+        return (f"{result.name!r}, {result.time!r}", True) if result.name and result.time else ("no name or date", False)
+    items, scroll = cast("tuple[Any, Scroll]", result)
+    if label == "photo post":
+        # The post renders even if the full-size lookup fails, so check it explicitly.
+        full_size: bool = "dst-jpg_" not in getattr(items.attachment, "url", "")
+        return ("full-size photo", True) if full_size else ("full-size photo lookup failed", False)
+    count: int = len(getattr(items, "posts", None) or getattr(items, "comments", None) or items)
+    return f"{count} items{' (rate limited)' if scroll.rate_limited else ''}", bool(count)
+
+
 def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
     """Run a few real queries with the candidate data; return what failed."""
     saved: tuple[dict[str, int], dict[str, Value]] = (dict(api.DOC_IDS), dict(api.EXTRA_VARIABLES))
@@ -193,28 +211,17 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
             ("photo post", extractor.get_post, ("10152716011096729", None, None, "filtered")),
             ("search", extractor.get_search, ("python", "pages")),
             ("group", extractor.get_group, ("python",)),
+            ("event", extractor.get_event, ("2088317415270457",)),
         ):
             for cache in (extractor.HEADERS, extractor.PAGES):
                 cache.clear()
             try:
-                result, scroll = fn(*args)
+                summary, ok = describe(label, fn(*args))
             except Exception as e:
-                print(f"  check {label}: FAILED ({e})", file=sys.stderr)
-                failures.append(f"{label}: {e}")
-            else:
-                if label == "photo post":
-                    # The post renders even if the full-size lookup fails, so check it explicitly.
-                    photo: str = getattr(result.attachment, "url", "")
-                    full_size: bool = "dst-jpg_" not in photo
-                    print(f"  check {label}: {'full-size photo' if full_size else 'NO full-size photo'}", file=sys.stderr)
-                    if not full_size:
-                        failures.append(f"{label}: full-size photo lookup failed")
-                    time.sleep(PAUSE)
-                    continue
-                count: int = len(getattr(result, "posts", None) or getattr(result, "comments", None) or result)
-                print(f"  check {label}: {count} items{' (rate limited)' if scroll.rate_limited else ''}", file=sys.stderr)
-                if not count:
-                    failures.append(f"{label}: no items")
+                summary, ok = f"FAILED ({e})", False
+            print(f"  check {label}: {summary}", file=sys.stderr)
+            if not ok:
+                failures.append(f"{label}: {summary}")
             time.sleep(PAUSE)
     finally:
         api.DOC_IDS.clear()

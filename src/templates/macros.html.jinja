@@ -65,7 +65,7 @@
 
 {% macro event(node) -%}
     <div class="event">
-        <h3>{{ node.title }}</h3>
+        <h3>{% if node.id %}<a href="{{ url_for('events.events', token=node.id) }}">{{ node.title }}</a>{% else %}{{ node.title }}{% endif %}</h3>
         <p>{{ node.time }}</p>
         {% if node.description is not none %}<p>{{ node.description }}</p>{% endif %}
     </div>
