@@ -1,0 +1,20 @@
+{% extends "timeline.html.jinja" %}
+{% from "macros.html.jinja" import media_grid %}
+{% from "context_macros.html.jinja" import navigation_buttons with context %}
+
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='album.css') }}" />
+{% endblock head %}
+
+{% block feed %}
+    {% if feed.media %}
+        {{ media_grid(feed.media) }}
+        {% if scroll.rate_limited %}
+            <span class="centered card">Couldn't fetch the rest of the photos: rate-limited.</span>
+        {% endif %}
+        {{ navigation_buttons() }}
+    {% else %}
+        <span class="card centered">No photos.</span>
+    {% endif %}
+{% endblock feed %}

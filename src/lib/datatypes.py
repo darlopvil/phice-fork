@@ -155,6 +155,7 @@ class Feed:
     is_private: bool = False
     info: list[dict[str, str | None]] = field(default_factory=list)
     posts: list[Post] = field(default_factory=list)
+    media: list[AlbumItem] = field(default_factory=list)
 
 
 @dataclass(kw_only=True)

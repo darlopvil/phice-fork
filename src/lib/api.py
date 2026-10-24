@@ -228,6 +228,34 @@ class Api:
             },
         )
 
+    def ProfileCometTopAppSectionQuery(self, user_id: str, section_token: str) -> list[JSON]:
+        return self.fetch(
+            "ProfileCometTopAppSectionQuery",
+            {
+                "collectionToken": None,
+                "scale": 1,
+                "sectionToken": section_token,
+                "useDefaultActor": False,
+                "userID": user_id,
+            },
+        )
+
+    def ProfileCometAppCollectionPhotosRendererPaginationQuery(
+        self, collection_id: str, cursor: str | None, count: int
+    ) -> list[JSON]:
+        return self.fetch(
+            "ProfileCometAppCollectionPhotosRendererPaginationQuery",
+            {
+                "count": count,
+                "created_time_end": None,
+                "created_time_start": None,
+                "cursor": cursor,
+                "scale": 1,
+                "tagged_user_ids": None,
+                "id": collection_id,
+            },
+        )
+
     def ProfileCometHeaderQuery(self, user_id: str) -> list[JSON]:
         return self.fetch(
             "ProfileCometHeaderQuery",

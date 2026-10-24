@@ -13,7 +13,7 @@ from .api import API_ERROR_CODES, Api
 from .cache import MISS, TTLCache
 from .datatypes import JSON, Album, EventPage, Feed, Photo, Post, Scroll, SearchItem, User
 from .exceptions import NetworkError, NotFoundError, ParsingError, ResponseError
-from .parsers import parse_album_item, parse_comment, parse_event, parse_post, parse_search
+from .parsers import parse_album_item, parse_collection_media, parse_comment, parse_event, parse_post, parse_search
 from .utils import base64s, catch_rate_limit, network_name, unwrap_link, urlbasename
 from .wrappers import http_client
 
@@ -38,6 +38,9 @@ COMMENT_PAGING: int = 2
 GROUP_PAGING: int = 4
 ALBUM_PAGING: int = 3
 SEARCH_PAGING: int = 3
+MEDIA_PAGE: int = 24  # photos per page of a profile tab
+# Facebook's ids for the apps behind profile sections, as found in their section tokens.
+PROFILE_SECTION_APPS: dict[str, str] = {"photos": "2305272732"}
 EXCLUDED_SHARE_HEADERS: list[str] = ["rdid", "share_url", "idorvanity"]
 
 # Everything fetched from Facebook is the same for every visitor, so it is cached
@@ -136,6 +139,78 @@ def get_profile(username: str, cursor: str | None = None, *, proxy: str | None =
                     scroll.has_next = rest[-1]["data"]["page_info"]["has_next_page"]
                     if not scroll.has_next:
                         break
+
+    return _cache_page(page_key, (feed, scroll), scroll)
+
+
+def _profile_header(api: Api, username: str) -> Feed:
+    """A profile's header for its tabs, from the Posts tab cache when possible."""
+    route, route_type = _route(api, username)
+    if not route or route_type != "profile":
+        raise NotFoundError(f"Profile {username} not found")
+    user_id: str = route["rootView"]["props"]["userID"]
+
+    if (cached_header := HEADERS.get(("profile", user_id))) is not MISS:
+        return replace(cast("Feed", cached_header), posts=[], media=[])
+    feed, _ = _fetch_profile_header(api, user_id)
+    HEADERS.set(("profile", user_id), replace(feed, posts=[]), HEADER_TTL)
+    return feed
+
+
+def _profile_section(api: Api, feed: Feed, section: str) -> JSON | None:
+    """The first page of a profile section, falling back to the page HTML when rate-limited."""
+    token: str = base64s(f"app_section:{feed.id}:{PROFILE_SECTION_APPS[section]}")
+    try:
+        response: list[JSON] = api.ProfileCometTopAppSectionQuery(feed.id, token)
+    except ResponseError as e:
+        if e.code != API_ERROR_CODES["rate_limit"]:
+            raise
+        response = api.query_from_html(f"{feed.token}/{section}").get("ProfileCometTopAppSectionQuery") or []
+        if not response:
+            raise
+    return response[0]["data"]["node"]
+
+
+def _add_media(feed: Feed, connection: JSON, scroll: Scroll) -> None:
+    feed.media.extend(m for i in connection["edges"] if (m := parse_collection_media(i["node"], feed.id)))
+    scroll.cursor = connection["page_info"]["end_cursor"]
+    scroll.has_next = connection["page_info"]["has_next_page"]
+
+
+@_guard
+def get_profile_photos(username: str, cursor: str | None = None, *, proxy: str | None = None) -> tuple[Feed, Scroll]:
+    page_key: tuple[str | None, ...] = ("profile_photos", username, cursor)
+    if (hit := PAGES.get(page_key)) is not MISS:
+        return cast("tuple[Feed, Scroll]", hit)
+
+    scroll: Scroll = Scroll(cursor)
+    with Api(proxy=proxy) as api:
+        feed: Feed = _profile_header(api, username)
+        collection_id: object = ROUTES.get(("photos", feed.id))
+        if collection_id is MISS or not scroll.cursor:
+            # The first page comes with the section; later ones only need its collection id.
+            section: JSON | None = _profile_section(api, feed, "photos")
+            collections: list[JSON] = (section or {}).get("all_collections", {}).get("nodes") or []
+            if not collections:
+                return _cache_page(page_key, (feed, Scroll(None)), scroll)
+            collection: JSON = collections[0]["style_renderer"]["collection"]
+            collection_id = collection["id"]
+            ROUTES.set(("photos", feed.id), collection_id, ROUTE_TTL)
+            if not scroll.cursor:
+                _add_media(feed, collection["pageItems"], scroll)
+        with catch_rate_limit(scroll):
+            for _ in range(3):
+                if not scroll.has_next or len(feed.media) >= MEDIA_PAGE:
+                    break
+                _add_media(
+                    feed,
+                    api.ProfileCometAppCollectionPhotosRendererPaginationQuery(
+                        str(collection_id),
+                        scroll.cursor,
+                        MEDIA_PAGE - len(feed.media),
+                    )[0]["data"]["node"]["pageItems"],
+                    scroll,
+                )
 
     return _cache_page(page_key, (feed, scroll), scroll)
 
@@ -361,7 +436,9 @@ def _resolve_post_id(api: Api, token: str) -> str | None:
             case "photos":
                 photo: JSON | None = api.CometPhotoRootContentQuery(token)[0]["data"]["currMedia"]
                 if photo:
-                    user_id: str = orjson.loads(photo["creation_story"]["tracking"])["actrs"]
+                    # Photos uploaded straight to a profile or album have no creation story: their owner is the same actor.
+                    story: JSON | None = photo.get("creation_story")
+                    user_id: str = orjson.loads(story["tracking"])["actrs"] if story else photo["owner"]["id"]
                     post_id = base64s(f"S:_I{user_id}:VK:{photo['id']}")
             case _:
                 pass

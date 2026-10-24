@@ -4,14 +4,14 @@
     padding: 8px;
 }
 
-#album_grid {
+.media_grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     grid-gap: 4px;
     align-items: center;
 }
 
-.album_item {
+.media_item {
     display: flex;
     position: relative;
     height: 100%;
@@ -19,11 +19,11 @@
     background-color: black;
 }
 
-.album_item * {
+.media_item * {
     width: 100%;
 }
 
-.album_item > a > .icon {
+.media_item > a > .icon {
     position: absolute;
     top: 50%;
     left: 50%;

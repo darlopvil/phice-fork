@@ -10,8 +10,8 @@ Facebook serves a different set of scripts on each load, so a pass can miss some
 instead of contacting Facebook, so a complete pass can be reused.
 
 Before writing, the new data is checked with a few real queries (a profile with its next page, a
-post with comments, a photo post with its full-size photo, a search, a group and an event); nothing is
-written unless they all work.
+post with comments, a photo post with its full-size photo, a search, a group, an event and a profile's
+photos); nothing is written unless they all work.
 
 Exit codes: 0 up to date or updated, 1 changes found (--check only), 2 some query ids not found
 (their current ids are kept), 3 the new data failed the check (nothing written).
@@ -57,6 +57,8 @@ QUERY_NAMES: list[str] = [
     "CometFeedStoryMenuQuery",
     "EventCometPermalinkHeaderQuery",
     "PublicEventCometAboutRootQuery",
+    "ProfileCometTopAppSectionQuery",
+    "ProfileCometAppCollectionPhotosRendererPaginationQuery",
 ]
 # Pages whose scripts define the queries above.
 URLS: list[str] = [
@@ -68,6 +70,7 @@ URLS: list[str] = [
     "https://www.facebook.com/photo/?fbid=10152716011096729&set=a.10152716010956729",
     "https://www.facebook.com/watch/search/?q=python",
     "https://www.facebook.com/events/2088317415270457",
+    "https://www.facebook.com/facebook/photos",
 ]
 # Preloaded scripts, plus the ones the page loads directly.
 SCRIPT_RES: tuple[re.Pattern[str], ...] = (
@@ -192,7 +195,7 @@ def describe(label: str, result: object) -> tuple[str, bool]:
         # The post renders even if the full-size lookup fails, so check it explicitly.
         full_size: bool = "dst-jpg_" not in getattr(items.attachment, "url", "")
         return ("full-size photo", True) if full_size else ("full-size photo lookup failed", False)
-    count: int = len(getattr(items, "posts", None) or getattr(items, "comments", None) or items)
+    count: int = len(getattr(items, "posts", None) or getattr(items, "media", None) or getattr(items, "comments", None) or items)
     return f"{count} items{' (rate limited)' if scroll.rate_limited else ''}", bool(count)
 
 
@@ -212,6 +215,7 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
             ("search", extractor.get_search, ("python", "pages")),
             ("group", extractor.get_group, ("python",)),
             ("event", extractor.get_event, ("2088317415270457",)),
+            ("profile photos", extractor.get_profile_photos, ("facebook",)),
         ):
             for cache in (extractor.HEADERS, extractor.PAGES):
                 cache.clear()

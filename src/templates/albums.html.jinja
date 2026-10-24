@@ -1,5 +1,5 @@
 {% extends "base.html.jinja" %}
-{% from "macros.html.jinja" import icon %}
+{% from "macros.html.jinja" import media_grid %}
 {% from "context_macros.html.jinja" import navigation_buttons with context %}
 
 {% block head %}
@@ -11,21 +11,7 @@
         <h1>{{ album.title }}</h1>
         <p>{{ album.description | urlize(target="_blank") }}</p>
     </div>
-    <div id="album_grid">
-        {% for i in album.items %}
-            <div class="album_item">
-                {% if type(i) == "Photo" %}
-                    <a href="{{ url_for('posts.photo', fbid=i.id) }}">
-                        <img src="{{ i.url | proxy }}" />
-                    </a>
-                {% else %}
-                    <a href="{{ url_for('posts.videos', author=i.owner_id, token=i.id) }}">
-                        <img src="{{ i.thumbnail_url | proxy }}" />{{ icon("play") }}
-                    </a>
-                {% endif %}
-            </div>
-        {% endfor %}
-    </div>
+    {{ media_grid(album.items) }}
     {% if scroll.rate_limited %}
         <span class="centered card">Couldn't fetch rest of items rate-limited.</span>
     {% endif %}

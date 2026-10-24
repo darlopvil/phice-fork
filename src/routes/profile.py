@@ -3,7 +3,7 @@ from flask.typing import ResponseReturnValue
 from werkzeug.utils import secure_filename
 
 from ..flask_utils import get_config
-from ..lib.extractor import get_profile
+from ..lib.extractor import get_profile, get_profile_photos
 
 bp: Blueprint = Blueprint("profile", __name__)
 
@@ -31,3 +31,10 @@ def profile(username: str = "", _: str | None = None) -> ResponseReturnValue:
             "content-disposition": f'inline; filename="{secure_filename(feed.token) or "feed"}.rss"',
         }
     return render_template("timeline.html.jinja", feed=feed, scroll=scroll, title=feed.name)
+
+
+@bp.route("/<string:username>/photos")
+def photos(username: str) -> ResponseReturnValue:
+    feed, scroll = get_profile_photos(username, request.args.get("cursor"), proxy=get_config().proxy)
+
+    return render_template("profile_photos.html.jinja", feed=feed, scroll=scroll, title=f"{feed.name} · Photos")

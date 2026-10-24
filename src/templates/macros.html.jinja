@@ -29,6 +29,24 @@
     {% endif -%}
 {%- endmacro %}
 
+{% macro media_grid(items) -%}
+    <div class="media_grid">
+        {% for i in items %}
+            <div class="media_item">
+                {% if type(i) == "Photo" %}
+                    <a href="{{ url_for('posts.photo', fbid=i.id) }}">
+                        <img src="{{ i.url | proxy }}" alt="{{ i.alt_text }}" />
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('posts.videos', author=i.owner_id, token=i.id) }}">
+                        <img src="{{ i.thumbnail_url | proxy }}" alt="Video thumbnail" />{{ icon("play") }}
+                    </a>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+{%- endmacro %}
+
 {% macro photo(node, cls="") -%}
     <a {% if node.id %}href="{{ url_for('posts.photo', fbid=node.id) }}"{% endif %}>
         <img

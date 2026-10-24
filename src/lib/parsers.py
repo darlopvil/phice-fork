@@ -337,6 +337,19 @@ def parse_album_item(node: JSON) -> Photo | Video:
             raise ParsingError(f"Unknown album item type {node['__typename']}")
 
 
+def parse_collection_media(item: JSON, owner_id: str) -> Photo | Video | None:
+    """A photo or video from a profile collection (Photos tab); None for anything else."""
+    node: JSON = item["node"]
+    thumbnail: str = item["image"]["uri"]
+    match node["__typename"]:
+        case "Photo":
+            return Photo(id=node["id"], url=thumbnail, owner_id=owner_id, alt_text=node.get("accessibility_caption") or "")
+        case "Video":
+            return Video(id=node["id"], url=None, thumbnail_url=thumbnail, owner_id=owner_id)
+        case _:
+            return None
+
+
 def _dig(obj: object, *keys: str) -> object:
     """obj[k1][k2]..., or None as soon as a key is missing or a value is null."""
     for key in keys:

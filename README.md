@@ -110,7 +110,7 @@ docker compose run --rm --build --no-deps --user "$(id -u):$(id -g)" \
 docker compose up -d --build
 ```
 
-The script loads a handful of public Facebook pages and their scripts (each script only once), so run it only when needed. Provider variables get the value Facebook's own provider modules return for a logged-out visitor, and none is ever removed, since queries that keep an older id may still need them. A query whose id can't be found keeps its current one. Before writing, the new data is checked with a few real queries (a profile, a post with comments, a photo post, a search, a group and an event), and nothing is written if any of them fails. Facebook serves a different set of scripts on each load, so a pass can miss some definitions: `--save-dump DIR` keeps what was downloaded and `--from-dump DIR` reads it back instead of contacting Facebook.
+The script loads a handful of public Facebook pages and their scripts (each script only once), so run it only when needed. Provider variables get the value Facebook's own provider modules return for a logged-out visitor, and none is ever removed, since queries that keep an older id may still need them. A query whose id can't be found keeps its current one. Before writing, the new data is checked with a few real queries (a profile, a post with comments, a photo post, a search, a group, an event and a profile's photos), and nothing is written if any of them fails. Facebook serves a different set of scripts on each load, so a pass can miss some definitions: `--save-dump DIR` keeps what was downloaded and `--from-dump DIR` reads it back instead of contacting Facebook.
 
 ## License
 

@@ -58,6 +58,24 @@
     margin-left: 4px;
 }
 
+.profile_tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.profile_tab {
+    padding: 6px 12px;
+    border-radius: 8px;
+    background-color: var(--background2);
+    font-weight: 500;
+}
+
+.profile_tab.active {
+    background-color: var(--background3);
+    color: var(--accent);
+}
+
 #timeline_feed {
     display: flex;
     flex-direction: column;

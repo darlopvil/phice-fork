@@ -56,6 +56,16 @@
             </div>
         </section>
         <section id="timeline_feed">
+            {% if not feed.is_group -%}
+                <nav class="profile_tabs">
+                    {% for endpoint, label in (("profile.profile", "Posts"), ("profile.photos", "Photos")) -%}
+                        <a href="{{ url_for(endpoint, username=feed.token) }}"><span
+                            class="profile_tab{{ ' active' if request.endpoint == endpoint or (endpoint == 'profile.profile' and request.endpoint == 'profile.profile_php') }}"
+                        >{{ label }}</span></a>
+                    {%- endfor %}
+                </nav>
+            {%- endif %}
+            {% block feed %}
             {% if feed.is_private %}
                 <span class="card centered">{{ icon("lock") }} The content is private.</span>
             {% elif feed.posts %}
@@ -69,6 +79,7 @@
             {% else %}
                 <span class="card centered">No posts.</span>
             {% endif %}
+            {% endblock feed %}
         </section>
     </div>
 {% endblock content %}
