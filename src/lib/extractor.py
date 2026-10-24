@@ -256,11 +256,7 @@ def get_post(
         post = parse_post(post_payload)
 
         if isinstance(post.attachment, Photo) and "dst-jpg_" in post.attachment.url:
-            menu_buttons: list[JSON] = api.CometFeedStoryMenuQuery(post_id)[0]["data"]["feed_unit"]["nfx_action_menu_items"]
-            for i in menu_buttons:
-                if i["__typename"] == "PhotoDownloadMenuItem":
-                    post.attachment.url = i["story"]["attachments"][0]["media"]["download_link"][:-5]
-                    break
+            post.attachment.url = full_size_photo_url(api, post_id) or post.attachment.url
 
         if post.feedback_id is not None:
             comments_payload: JSON
@@ -325,6 +321,21 @@ def get_post(
                                 break
 
     return _cache_page(page_key, (post, scroll), scroll)
+
+
+def full_size_photo_url(api: Api, post_id: str) -> str | None:
+    """Full-size URL of a post's single photo, from its "Download" menu item.
+
+    It only upgrades the resolution, so any failure is logged and the post keeps its regular photo.
+    """
+    try:
+        items: list[JSON] = api.CometFeedStoryMenuQuery(post_id)[0]["data"]["feed_unit"]["nfx_action_menu_items"]
+        return next(
+            i["story"]["attachments"][0]["media"]["download_link"][:-5] for i in items if i["__typename"] == "PhotoDownloadMenuItem"
+        )
+    except (ResponseError, NetworkError, ParsingError, KeyError, IndexError, TypeError, StopIteration) as e:
+        log.warning("facebook: full-size photo lookup failed for %s: %s", post_id, e)
+        return None
 
 
 def _resolve_post_id(api: Api, token: str) -> str | None:

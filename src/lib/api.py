@@ -474,6 +474,17 @@ class Api:
         return self.fetch(
             "CometFeedStoryMenuQuery",
             {
+                # Crossposting variables: required by current versions of the query, sent as
+                # Facebook's own client sends them.
+                "crosspostCallerName": "fx_product_foundation_client_FXOnline_client_cache",
+                "crosspostCustomPartnerParams": [
+                    {"key": "CROSSPOSTING_DESTINATION_APP", "value": "IG"},
+                    {"key": "CROSSPOSTING_SHARE_TO_SURFACE", "value": ""},
+                    {"key": "SHOULD_RETURN_AUTO_XPOST_SETTING", "value": "true"},
+                ],
+                "crosspostServiceNames": ["CROSS_POSTING_SETTING"],
+                "serialized_unconnected_waist_ranking_info": None,
+                "shouldFetchCrosspostMetadata": False,
                 "feed_location": "COMET_MEDIA_VIEWER",
                 "feed_menu_icon_variant": "FILLED",
                 "id": story_id,

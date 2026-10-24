@@ -10,7 +10,8 @@ Facebook serves a different set of scripts on each load, so a pass can miss some
 instead of contacting Facebook, so a complete pass can be reused.
 
 Before writing, the new data is checked with a few real queries (a profile with its next page, a
-post with comments, a search and a group); nothing is written unless they all work.
+post with comments, a photo post with its full-size photo, a search and a group); nothing is written
+unless they all work.
 
 Exit codes: 0 up to date or updated, 1 changes found (--check only), 2 some query ids not found
 (their current ids are kept), 3 the new data failed the check (nothing written).
@@ -189,6 +190,7 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
         for label, fn, args in (
             ("profile", extractor.get_profile, ("facebook",)),
             ("post comments", extractor.get_post, ("1193563419482343", None, None, "newest")),
+            ("photo post", extractor.get_post, ("10152716011096729", None, None, "filtered")),
             ("search", extractor.get_search, ("python", "pages")),
             ("group", extractor.get_group, ("python",)),
         ):
@@ -200,6 +202,15 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
                 print(f"  check {label}: FAILED ({e})", file=sys.stderr)
                 failures.append(f"{label}: {e}")
             else:
+                if label == "photo post":
+                    # The post renders even if the full-size lookup fails, so check it explicitly.
+                    photo: str = getattr(result.attachment, "url", "")
+                    full_size: bool = "dst-jpg_" not in photo
+                    print(f"  check {label}: {'full-size photo' if full_size else 'NO full-size photo'}", file=sys.stderr)
+                    if not full_size:
+                        failures.append(f"{label}: full-size photo lookup failed")
+                    time.sleep(PAUSE)
+                    continue
                 count: int = len(getattr(result, "posts", None) or getattr(result, "comments", None) or result)
                 print(f"  check {label}: {count} items{' (rate limited)' if scroll.rate_limited else ''}", file=sys.stderr)
                 if not count:
