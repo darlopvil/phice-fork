@@ -128,7 +128,7 @@ Copy `config.example.toml` to `config.toml`. Every option is optional.
 | `comments_sort` | `"filtered"` | `filtered`, `newest`, `all` |
 | `proxy` | `true` | Proxy images and videos through the instance. |
 | `expand` | `false` | Show long posts in full instead of "Read more". |
-| `timezone` | `0` | UTC offset in hours, from `-12` to `14`. |
+| `timezone` | `"UTC"` | Time zone name, such as `"Europe/Madrid"`; daylight saving time is applied automatically. An old UTC offset in hours (`-12` to `14`) still works, as a fixed offset. |
 
 Invalid defaults stop the app at startup with an explicit error.
 

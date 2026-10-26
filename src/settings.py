@@ -1,5 +1,6 @@
 from dataclasses import dataclass, fields
 from typing import Any, NewType, get_type_hints, override
+from zoneinfo import available_timezones
 
 from flask import has_request_context, request
 
@@ -13,7 +14,9 @@ THEMES: dict[str, str] = {
     "catppuccin_latte": "Catppuccin latte",
 }
 COMMENT_SORTS: tuple[str, ...] = ("filtered", "newest", "all")
-TIMEZONES: range = range(-12, 15)
+TIMEZONES: frozenset[str] = frozenset(available_timezones())
+ZONE_NAMES: dict[str, str] = {i.lower(): i for i in TIMEZONES}  # typed names match whatever their case
+LEGACY_OFFSETS: range = range(-12, 15)  # the setting used to be a UTC offset in hours
 BOOLEANS: dict[str, bool] = {"on": True, "true": True, "off": False, "false": False, "": False}
 
 
@@ -29,9 +32,12 @@ def parse_setting(name: str, raw: str | None) -> object:
         case "proxy" | "expand":
             return BOOLEANS.get(raw, Undefined)
         case "timezone":
-            if len(raw) <= 3 and raw.removeprefix("-").isdigit() and int(raw) in TIMEZONES:
-                return int(raw)
-            return Undefined
+            if len(raw) <= 3 and raw.removeprefix("-").isdigit():
+                if int(raw) not in LEGACY_OFFSETS:
+                    return Undefined
+                # Etc/GMT zones have the sign reversed: UTC+1 is Etc/GMT-1.
+                return f"Etc/GMT{-int(raw):+d}" if int(raw) else "UTC"
+            return ZONE_NAMES.get(raw.strip().lower(), Undefined)
         case _:
             return Undefined
 
@@ -57,13 +63,15 @@ class UserSettings(ConfigBase):
     comments_sort: str = "filtered"
     proxy: bool = True
     expand: bool = False
-    timezone: int = 0
+    timezone: str | int = "UTC"  # an IANA time zone name; an old UTC offset in hours is converted
 
     def __post_init__(self) -> None:
         for i in fields(self):
             value: object = object.__getattribute__(self, i.name)
-            if parse_setting(i.name, serialize_setting(value)) is Undefined:
+            parsed: object = parse_setting(i.name, serialize_setting(value))
+            if parsed is Undefined:
                 raise ValueError(f"Invalid default_user_settings.{i.name}: {value!r}")
+            setattr(self, i.name, parsed)
 
     @override
     def __getattribute__(self, name: str, /) -> Any:

@@ -6,7 +6,7 @@ from flask import request, url_for
 from .flask_utils import get_config, get_user_settings
 from .lib.cache import MISS, TTLCache
 from .lib.datatypes import Post, PostType, Reactions
-from .settings import THEMES
+from .settings import THEMES, TIMEZONES
 
 REACTION_ICONS: dict[str, str] = {
     "like": "thumbs-up",
@@ -103,6 +103,7 @@ GLOBALS: dict[str, Any] = {
     "get_config": get_config,
     "get_user_settings": get_user_settings,
     "THEMES": THEMES,
+    "TIMEZONES": sorted(TIMEZONES),
     "post_url": post_url,
     "uuid": juuid,
     "rss_url": rss_url,

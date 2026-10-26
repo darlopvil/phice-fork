@@ -35,12 +35,17 @@
         <label class="settings_row">
             Time zone
             <input
-                type="number"
+                type="text"
                 name="timezone"
                 value="{{ get_user_settings().timezone }}"
-                min="-12"
-                max="14"
+                list="timezones"
+                placeholder="Europe/Madrid"
+                autocomplete="off"
+                spellcheck="false"
             />
+            <datalist id="timezones">
+                {%- for i in TIMEZONES %}<option value="{{ i }}"></option>{% endfor -%}
+            </datalist>
         </label>
         <hr />
         <div class="settings_footer">

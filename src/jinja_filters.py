@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import partial
 from urllib.parse import ParseResult, urlparse
+from zoneinfo import ZoneInfo
 
 from flask import url_for
 
@@ -24,9 +25,14 @@ def proxy(s: str, *, external: bool = False) -> str:
     return s
 
 
+def _user_zone() -> ZoneInfo:
+    return ZoneInfo(str(get_user_settings().timezone))  # validated by the settings
+
+
 def format_time(timestamp: str | float) -> str:
-    time: datetime = datetime.fromtimestamp(float(timestamp))
-    today: datetime = datetime.now()
+    zone: ZoneInfo = _user_zone()
+    time: datetime = datetime.fromtimestamp(float(timestamp), tz=zone)
+    today: datetime = datetime.now(tz=zone)
     seconds: float = (today - time).total_seconds()
 
     if (since := int(seconds)) < 60:
@@ -47,11 +53,7 @@ def format_time(timestamp: str | float) -> str:
 
 
 def format_time_full(timestamp: str | float) -> str:
-    time: float = float(timestamp)
-    offset: int = get_user_settings().timezone
-    time += offset * 60 * 60
-
-    return datetime.fromtimestamp(time, tz=UTC).strftime(f"%Y/%m/%d - %I:%M:%S %p UTC{offset:+}")
+    return datetime.fromtimestamp(float(timestamp), tz=_user_zone()).strftime("%Y/%m/%d - %I:%M:%S %p %Z")
 
 
 def format_time_rfc822(timestamp: str | float) -> str:
