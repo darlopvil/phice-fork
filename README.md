@@ -61,6 +61,7 @@ What Facebook keeps for logged-in users is not available: see [Won't fix](#wont-
 - The same hardcoded identity cookies sent to Facebook by every instance ([#9](https://github.com/darlopvil/phice-fork/issues/9)).
 - Outdated Facebook query ids with no way to refresh them, responses rejected when only some fields failed, and posts with a single photo failing ([#11](https://github.com/darlopvil/phice-fork/issues/11)).
 - Photos uploaded without a post failing to open ([#16](https://github.com/darlopvil/phice-fork/issues/16)).
+- Dates an hour off for half of the year: the time zone is now picked by name and follows daylight saving time ([#20](https://github.com/darlopvil/phice-fork/issues/20)).
 
 ### Added
 
