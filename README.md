@@ -4,9 +4,9 @@ A lightweight privacy-friendly alternative front-end for Facebook.
 
 This is a personal fork of [Phice](https://codeberg.org/TronNerd82/phice), originally created by c4ffe14e (caffeine) and contributors. It fixes bugs and hardens the project for self-hosting while keeping the spirit of the original: simple, lightweight and JavaScript-free.
 
-It is maintained for a single private instance. There are no public instances, and fixes stay in this fork.
+The fork is public because the AGPL requires the source of a modified version that is served over a network to be published, and so that the code deployed is exactly the code in this repository. Issues are welcome and will be looked at in detail. There are no public instances, and changes are not sent upstream.
 
-> **Modification notice:** this is a modified version of Phice, changed by darlopvil since 2026-10-21. See the commit history and the closed issues of this repository for the details of every change.
+> **Modification notice:** this is a modified version of Phice, changed by darlopvil since 2026-10-21. [Changes from the original](#changes-from-the-original) summarises them; the commit history and the closed issues have the details of every change.
 
 Inspired by projects like [Nitter](https://github.com/zedeus/nitter), [Invidious](https://github.com/iv-org/invidious) and others.
 
@@ -24,6 +24,61 @@ Inspired by projects like [Nitter](https://github.com/zedeus/nitter), [Invidious
 - No trackers
 - Media proxied through the instance (can be turned off per user)
 - RSS feeds for profiles and groups
+
+## What it shows
+
+Everything Facebook shows a logged-out visitor:
+
+- Profiles and Pages: their posts, intro (links are named after the network they lead to) and the Photos, Videos and Events tabs. Facebook only shows the videos of Pages.
+- Posts, videos, reels and photos, with their comments and replies.
+- Public groups and their posts.
+- Albums and event pages.
+- Search (pages, posts, recent posts and people).
+- `/share/` links, resolved to the page they point to.
+
+Phice answers the same paths as facebook.com, so replacing the host of a Facebook link is enough:
+
+| Page | Paths |
+|---|---|
+| Profile | `/<profile>`, `/<profile>/timeline`, `/profile.php?id=<id>`, `/people/<name>/<id>`, `/p/<profile>` |
+| Profile tabs | `/<profile>/photos`, `/<profile>/videos`, `/<profile>/events`, `/<profile>/upcoming_hosted_events`, `/<profile>/past_hosted_events` |
+| Post | `/<author>/posts/<id>`, `/<author>/videos/<id>`, `/reel/<id>`, `/photo?fbid=<id>`, `/photo.php?fbid=<id>`, `/permalink.php?story_fbid=<id>`, `/story.php?story_fbid=<id>`, `/watch?v=<id>` |
+| Group | `/groups/<group>`, `/groups/<group>/posts/<id>`, `/groups/<group>/permalink/<id>` |
+| Other | `/media/set?set=<album>`, `/events/<id>`, `/search`, `/share/<...>` |
+
+What Facebook keeps for logged-in users is not available: see [Won't fix](#wont-fix).
+
+## Changes from the original
+
+### Fixed
+
+- Open redirect after saving the settings ([#1](https://github.com/darlopvil/phice-fork/issues/1)).
+- Invalid settings cookies breaking every page with a 500 ([#2](https://github.com/darlopvil/phice-fork/issues/2)).
+- Media served as `http://` (mixed content) behind a reverse proxy that terminates TLS ([#3](https://github.com/darlopvil/phice-fork/issues/3)).
+- RSS feeds crashing or linking to the wrong pages, and feed readers subscribing to the home page instead of the feed ([#6](https://github.com/darlopvil/phice-fork/issues/6)).
+- GIFs frozen in browsers that block autoplay ([#7](https://github.com/darlopvil/phice-fork/issues/7)).
+- Facebook failures shown as tracebacks instead of error pages with proper status codes ([#8](https://github.com/darlopvil/phice-fork/issues/8)).
+- The same hardcoded identity cookies sent to Facebook by every instance ([#9](https://github.com/darlopvil/phice-fork/issues/9)).
+- Outdated Facebook query ids with no way to refresh them, responses rejected when only some fields failed, and posts with a single photo failing ([#11](https://github.com/darlopvil/phice-fork/issues/11)).
+- Photos uploaded without a post failing to open ([#16](https://github.com/darlopvil/phice-fork/issues/16)).
+
+### Added
+
+- AGPL compliance: the source link points to this fork, plus a modification notice and footer credits ([#4](https://github.com/darlopvil/phice-fork/issues/4)).
+- An in-memory cache of Facebook responses shared by all visitors, so repeated views and "Next" clicks send as few requests as possible ([#5](https://github.com/darlopvil/phice-fork/issues/5)).
+- Proxied media that browsers can cache instead of downloading it again ([#13](https://github.com/darlopvil/phice-fork/issues/13)).
+- A reproducible, unprivileged and health-checked container ([#10](https://github.com/darlopvil/phice-fork/issues/10)).
+- Previous and Start buttons, one-click comment sorting, aligned reaction badges and a note when Facebook hides replies ([#12](https://github.com/darlopvil/phice-fork/issues/12)).
+- A script that refreshes the query ids and checks the new data before writing it ([#11](https://github.com/darlopvil/phice-fork/issues/11)).
+- Linked accounts in profile intros named after their network ([#14](https://github.com/darlopvil/phice-fork/issues/14)).
+- Event pages ([#15](https://github.com/darlopvil/phice-fork/issues/15)).
+- Profile tabs: Photos ([#16](https://github.com/darlopvil/phice-fork/issues/16)), Videos ([#17](https://github.com/darlopvil/phice-fork/issues/17)) and Events ([#18](https://github.com/darlopvil/phice-fork/issues/18)).
+
+### Won't fix
+
+- Hashtag pages ([#19](https://github.com/darlopvil/phice-fork/issues/19)): Facebook gives logged-out visitors a single post and answers every request for more with a rate limit.
+- Logging in with a Facebook account: Phice stays anonymous, so replies and anything else Facebook keeps for logged-in users can't be shown. Phice says so instead of showing an empty thread.
+- Marketplace and Stories: they need an account.
 
 ## Installation
 
