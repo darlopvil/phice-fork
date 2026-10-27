@@ -2,6 +2,7 @@ import functools
 import logging
 from collections import defaultdict
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from typing import cast
 from urllib.parse import ParseResult, parse_qs, urlencode, urlparse
@@ -91,6 +92,13 @@ def _route(api: Api, path: str) -> tuple[JSON | None, str | None]:
     return route, route_type
 
 
+def _user_id(api: Api, username: str) -> str:
+    route, route_type = _route(api, username)
+    if not route or route_type != "profile":
+        raise NotFoundError(f"Profile {username} not found")
+    return route["rootView"]["props"]["userID"]
+
+
 def _cache_page[T](key: tuple[str | None, ...], result: T, scroll: Scroll) -> T:
     # A page cut short by a rate limit is not cached, so the next view retries it.
     if not scroll.rate_limited:
@@ -107,10 +115,7 @@ def get_profile(username: str, cursor: str | None = None, *, proxy: str | None =
     scroll: Scroll = Scroll(cursor)
     feed: Feed
     with Api(proxy=proxy) as api:
-        route, route_type = _route(api, username)
-        if not route or route_type != "profile":
-            raise NotFoundError(f"Profile {username} not found")
-        user_id: str = route["rootView"]["props"]["userID"]
+        user_id: str = _user_id(api, username)
 
         posts_feed: list[JSON] | None = None
         first_page: bool = not scroll.cursor
@@ -126,7 +131,7 @@ def get_profile(username: str, cursor: str | None = None, *, proxy: str | None =
         if cached_header is not MISS:
             feed = replace(cast("Feed", cached_header), posts=[])
         else:
-            feed, posts_feed = _fetch_profile_header(api, user_id)
+            feed, posts_feed, _ = _fetch_profile_header(api, user_id)
             HEADERS.set(("profile", user_id), replace(feed, posts=[]), HEADER_TTL)
 
         if first_page and posts_feed is not None:
@@ -183,29 +188,27 @@ def _profile_status(side: JSON) -> str | None:
     return None
 
 
-def _profile_header(api: Api, username: str) -> Feed:
-    """A profile's header for its tabs, from the Posts tab cache when possible."""
-    route, route_type = _route(api, username)
-    if not route or route_type != "profile":
-        raise NotFoundError(f"Profile {username} not found")
-    user_id: str = route["rootView"]["props"]["userID"]
+def _profile_header(api: Api, user_id: str, section: Callable[[], JSON | None] | None = None) -> tuple[Feed, JSON | None]:
+    """A profile's header for its tabs, from the Posts tab cache when possible.
 
+    A tab that also needs its section passes the request for it, which goes out with the header's.
+    """
     if (cached_header := HEADERS.get(("profile", user_id))) is not MISS:
-        return replace(cast("Feed", cached_header), posts=[], media=[], events=[], lists=[])
-    feed, _ = _fetch_profile_header(api, user_id)
+        return replace(cast("Feed", cached_header), posts=[], media=[], events=[], lists=[]), section() if section else None
+    feed, _, section_data = _fetch_profile_header(api, user_id, section)
     HEADERS.set(("profile", user_id), replace(feed, posts=[], media=[], events=[], lists=[]), HEADER_TTL)
-    return feed
+    return feed, section_data
 
 
-def _profile_section(api: Api, feed: Feed, section: str, *, first_part: bool = False) -> JSON | None:
+def _profile_section(api: Api, user_id: str, username: str, section: str, *, first_part: bool = False) -> JSON | None:
     """The first page of a profile section, falling back to the page HTML when rate-limited."""
-    token: str = base64s(f"app_section:{feed.id}:{PROFILE_SECTION_APPS[section]}")
+    token: str = base64s(f"app_section:{user_id}:{PROFILE_SECTION_APPS[section]}")
     try:
-        response: list[JSON] = api.ProfileCometTopAppSectionQuery(feed.id, token, first_part=first_part)
+        response: list[JSON] = api.ProfileCometTopAppSectionQuery(user_id, token, first_part=first_part)
     except ResponseError as e:
         if e.code != API_ERROR_CODES["rate_limit"]:
             raise
-        response = api.query_from_html(f"{feed.token}/{section}").get("ProfileCometTopAppSectionQuery") or []
+        response = api.query_from_html(f"{username}/{section}").get("ProfileCometTopAppSectionQuery") or []
         if not response:
             raise
     return response[0]["data"]["node"]
@@ -225,11 +228,14 @@ def get_profile_photos(username: str, cursor: str | None = None, *, proxy: str |
 
     scroll: Scroll = Scroll(cursor)
     with Api(proxy=proxy) as api:
-        feed: Feed = _profile_header(api, username)
-        collection_id: object = ROUTES.get(("photos", feed.id))
-        if collection_id is MISS or not scroll.cursor:
-            # The first page comes with the section; later ones only need its collection id.
-            section: JSON | None = _profile_section(api, feed, "photos")
+        user_id: str = _user_id(api, username)
+        collection_id: object = ROUTES.get(("photos", user_id))
+        # The first page comes with the section; later ones only need its collection id.
+        wants_section: bool = collection_id is MISS or not scroll.cursor
+        feed, section = _profile_header(
+            api, user_id, functools.partial(_profile_section, api, user_id, username, "photos") if wants_section else None
+        )
+        if wants_section:
             collections: list[JSON] = (section or {}).get("all_collections", {}).get("nodes") or []
             if not collections:
                 return _cache_page(page_key, (feed, Scroll(None)), scroll)
@@ -269,12 +275,17 @@ def get_profile_reels(username: str, cursor: str | None = None, *, proxy: str | 
 
     scroll: Scroll = Scroll(cursor)
     with Api(proxy=proxy) as api:
-        feed: Feed = _profile_header(api, username)
-        collection_id: object = ROUTES.get(("reels", feed.id))
-        if collection_id is MISS or not cursor:
-            # The section comes with the first ten reels; later pages only need its collection id.
-            section: JSON = _profile_section(api, feed, "reels_tab", first_part=True) or {}
-            all_collections: JSON = section.get("all_collections") or {}
+        user_id: str = _user_id(api, username)
+        collection_id: object = ROUTES.get(("reels", user_id))
+        # The section comes with the first ten reels; later pages only need its collection id.
+        wants_section: bool = collection_id is MISS or not cursor
+        feed, section = _profile_header(
+            api,
+            user_id,
+            functools.partial(_profile_section, api, user_id, username, "reels_tab", first_part=True) if wants_section else None,
+        )
+        if wants_section:
+            all_collections: JSON = (section or {}).get("all_collections") or {}
             collections: list[JSON] = all_collections.get("nodes") or []
             collection: JSON = collections[0]["style_renderer"]["collection"] if collections else {}
             if not collection.get("aggregated_fb_shorts"):
@@ -298,7 +309,7 @@ def get_profile_videos(username: str, cursor: str | None = None, *, proxy: str |
 
     scroll: Scroll = Scroll(cursor)
     with Api(proxy=proxy) as api:
-        feed: Feed = _profile_header(api, username)
+        feed, _ = _profile_header(api, _user_id(api, username))
         if not feed.page_id:
             # Only Pages have a videos tab Facebook shows logged-out visitors.
             return _cache_page(page_key, (feed, Scroll(None)), scroll)
@@ -341,17 +352,20 @@ def get_profile_events(
 
     scroll: Scroll = Scroll(cursor)
     with Api(proxy=proxy) as api:
-        feed: Feed = _profile_header(api, username)
+        user_id: str = _user_id(api, username)
         # A profile's events come in lists ("Upcoming", "Past"...): (slug, name, collection id), the default first.
         lists: list[tuple[str, str, str]]
         first_page: JSON | None = None
-        cached_lists: object = HEADERS.get(("events_lists", feed.id))
-        if cached_lists is not MISS and (cursor or list_slug):
+        cached_lists: object = HEADERS.get(("events_lists", user_id))
+        wants_section: bool = cached_lists is MISS or not (cursor or list_slug)
+        feed, section = _profile_header(
+            api, user_id, functools.partial(_profile_section, api, user_id, username, "events") if wants_section else None
+        )
+        if not wants_section:
             lists = cast("list[tuple[str, str, str]]", cached_lists)
         else:
-            section: JSON = _profile_section(api, feed, "events") or {}
-            nav_collections: JSON = section.get("nav_collections") or {}
-            all_collections: JSON = section.get("all_collections") or {}
+            nav_collections: JSON = (section or {}).get("nav_collections") or {}
+            all_collections: JSON = (section or {}).get("all_collections") or {}
             nav: list[JSON] = nav_collections.get("nodes") or []
             lists = [(urlbasename(i["url"]), i["name"], i["id"]) for i in nav]
             collections: list[JSON] = all_collections.get("nodes") or []
@@ -391,25 +405,39 @@ def get_profile_events(
     return _cache_page(page_key, (feed, scroll), scroll)
 
 
-def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
-    """Fetch and parse everything above the posts; also return the first timeline page for page 1."""
+def _fetch_profile_header(
+    api: Api, user_id: str, extra: Callable[[], JSON | None] | None = None
+) -> tuple[Feed, list[JSON], JSON | None]:
+    """Fetch and parse everything above the posts; also return the first timeline page for page 1.
+
+    Its queries, and the extra one a tab may pass, don't depend on each other, so they go out at once,
+    as a browser's would: the slowest one sets the time instead of their sum.
+    """
     header_query: list[JSON]
     side_query: list[JSON]
     posts_query: list[JSON]
-    try:
-        header_query = api.ProfileCometHeaderQuery(user_id)
-        side_query = api.ProfilePlusCometLoggedOutRootQuery(user_id)
-        posts_query = api.ProfileCometTimelineFeedRefetchQuery(user_id, None)
-    except ResponseError as e:
-        if e.code != API_ERROR_CODES["rate_limit"]:
-            raise
-        html_query = api.query_from_html(f"profile.php?id={user_id}")
-        if not html_query:
-            raise
+    extra_data: JSON | None = None
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        extra_future: Future[JSON | None] | None = pool.submit(extra) if extra else None
+        header_future: Future[list[JSON]] = pool.submit(api.ProfileCometHeaderQuery, user_id)
+        side_future: Future[list[JSON]] = pool.submit(api.ProfilePlusCometLoggedOutRootQuery, user_id)
+        posts_future: Future[list[JSON]] = pool.submit(api.ProfileCometTimelineFeedRefetchQuery, user_id, None)
+        try:
+            header_query = header_future.result()
+            side_query = side_future.result()
+            posts_query = posts_future.result()
+        except ResponseError as e:
+            if e.code != API_ERROR_CODES["rate_limit"]:
+                raise
+            html_query = api.query_from_html(f"profile.php?id={user_id}")
+            if not html_query:
+                raise
 
-        header_query = html_query["ProfileCometHeaderQuery"]
-        side_query = html_query["ProfilePlusCometLoggedOutRootQuery"]
-        posts_query = html_query["ProfileCometTimelineFeedQuery"]
+            header_query = html_query["ProfileCometHeaderQuery"]
+            side_query = html_query["ProfilePlusCometLoggedOutRootQuery"]
+            posts_query = html_query["ProfileCometTimelineFeedQuery"]
+        if extra_future is not None:
+            extra_data = extra_future.result()
 
     header: JSON = header_query[0]["data"]["user"]["profile_header_renderer"]["user"]
     side: JSON = side_query[-1]["data"]["profile_tile_sections"]["edges"][0]["node"]
@@ -489,7 +517,7 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
 
             feed.info.append(item)
 
-    return feed, posts_feed
+    return feed, posts_feed, extra_data
 
 
 @_guard

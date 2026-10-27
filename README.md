@@ -70,6 +70,7 @@ What Facebook keeps for logged-in users is not available: see [Won't fix](#wont-
 
 - AGPL compliance: the source link points to this fork, plus a modification notice and footer credits ([#4](https://github.com/darlopvil/phice-fork/issues/4)).
 - An in-memory cache of Facebook responses shared by all visitors, so repeated views and "Next" clicks send as few requests as possible ([#5](https://github.com/darlopvil/phice-fork/issues/5)).
+- Requests that don't depend on each other sent at once, as a browser does: a profile tab loads in about a third of the time it took ([#23](https://github.com/darlopvil/phice-fork/issues/23)).
 - Proxied media that browsers can cache instead of downloading it again ([#13](https://github.com/darlopvil/phice-fork/issues/13)).
 - A reproducible, unprivileged and health-checked container ([#10](https://github.com/darlopvil/phice-fork/issues/10)).
 - Previous and Start buttons, one-click comment sorting, aligned reaction badges and a note when Facebook hides replies ([#12](https://github.com/darlopvil/phice-fork/issues/12)).
