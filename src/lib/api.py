@@ -168,7 +168,7 @@ class Api:
 
     # EXPERIMENTAL
     def query_from_html(self, route: str) -> dict[str, list[JSON]]:
-        log.info("facebook: html /%s", route)
+        log.warning("facebook: html /%s (rate-limit fallback)", route)
         response: httpx.Response = self._request("GET", f"https://www.facebook.com/{route}", follow_redirects=True)
         if response.status_code != 200:
             raise ResponseError(f"Facebook returned {response.status_code}")
@@ -301,22 +301,6 @@ class Api:
             "ProfilePlusCometLoggedOutRootQuery",
             {
                 "scale": 1,
-                "userID": user_id,
-            },
-        )
-
-    def ProfileCometTimelineFeedQuery(self, user_id: str) -> list[JSON]:
-        return self.fetch(
-            "ProfileCometTimelineFeedQuery",
-            {
-                "count": 1,
-                "feedbackSource": 0,
-                "feedLocation": "TIMELINE",
-                "omitPinnedPost": False,
-                "privacySelectorRenderLocation": "COMET_STREAM",
-                "renderLocation": "timeline",
-                "scale": 1,
-                "stream_count": 1,
                 "userID": user_id,
             },
         )

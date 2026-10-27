@@ -112,11 +112,12 @@ def get_profile(username: str, cursor: str | None = None, *, proxy: str | None =
         user_id: str = route["rootView"]["props"]["userID"]
 
         posts_feed: list[JSON] | None = None
+        first_page: bool = not scroll.cursor
         cached_header: object = HEADERS.get(("profile", user_id))
-        if cached_header is not MISS and not scroll.cursor:
-            # Header known: page 1 only needs the first feed query, not the header ones.
+        if cached_header is not MISS and first_page:
+            # Header known: page 1 only needs the first page of the timeline, not the header queries.
             try:
-                posts_feed = api.ProfileCometTimelineFeedQuery(user_id)
+                posts_feed = api.ProfileCometTimelineFeedRefetchQuery(user_id, None)
             except ResponseError as e:
                 if e.code != API_ERROR_CODES["rate_limit"]:
                     raise
@@ -127,31 +128,58 @@ def get_profile(username: str, cursor: str | None = None, *, proxy: str | None =
             feed, posts_feed = _fetch_profile_header(api, user_id)
             HEADERS.set(("profile", user_id), replace(feed, posts=[]), HEADER_TTL)
 
-        if not scroll.cursor and posts_feed is not None:
-            if i := posts_feed[0]["data"]["user"]["timeline_list_feed_units"]["edges"]:
-                feed.posts.append(parse_post(i[0]["node"]))
-            for i in posts_feed[1:]:
-                if page_info := i["data"].get("page_info"):
-                    scroll.cursor = page_info["end_cursor"]
-                    scroll.has_next = page_info["has_next_page"]
-                    break
-            else:
-                raise ParsingError("Couldn't find page_info")
+        if first_page and posts_feed is not None:
+            _add_timeline_page(feed, scroll, posts_feed)
         if scroll.has_next:
             with catch_rate_limit(scroll):
-                for _ in range(PROFILE_PAGING):
-                    response: list[JSON] = api.ProfileCometTimelineFeedRefetchQuery(user_id, scroll.cursor)
-                    rest: list[JSON] = [i for i in response[1:] if "ProfileCometTimelineFeed_user" in i.get("label", "")]
-
-                    if edges := response[0]["data"]["node"]["timeline_list_feed_units"]["edges"]:
-                        feed.posts.append(parse_post(edges[0]["node"]))
-                    feed.posts.extend(parse_post(i["data"]["node"]) for i in rest[:-1])
-                    scroll.cursor = rest[-1]["data"]["page_info"]["end_cursor"]
-                    scroll.has_next = rest[-1]["data"]["page_info"]["has_next_page"]
+                # Page 1 already holds the first timeline page, so it pages once less.
+                for _ in range(PROFILE_PAGING - 1 if first_page else PROFILE_PAGING):
+                    _add_timeline_page(feed, scroll, api.ProfileCometTimelineFeedRefetchQuery(user_id, scroll.cursor))
                     if not scroll.has_next:
                         break
 
     return _cache_page(page_key, (feed, scroll), scroll)
+
+
+def _part_data(part: JSON) -> JSON:
+    return part.get("data") or {}
+
+
+def _add_timeline_page(feed: Feed, scroll: Scroll, response: list[JSON]) -> None:
+    """Posts and next cursor from one page of a profile's timeline.
+
+    The refetch query answers with a first edge, then one streamed post per part and the cursor in
+    the last one; the page HTML's first query (rate-limit fallback) only gives its first edge.
+    """
+    data: JSON = response[0]["data"]
+    root: JSON = data.get("node") or data["user"]
+    if edges := root["timeline_list_feed_units"]["edges"]:
+        feed.posts.append(parse_post(edges[0]["node"]))
+    if "node" in data:
+        parts: list[JSON] = [i for i in response[1:] if "ProfileCometTimelineFeed_user" in i.get("label", "")]
+        feed.posts.extend(parse_post(i["data"]["node"]) for i in parts if _part_data(i).get("node"))
+    page_info: JSON | None = next(
+        (_part_data(i)["page_info"] for i in reversed(response[1:]) if _part_data(i).get("page_info")), None
+    )
+    if page_info is None:
+        raise ParsingError("Couldn't find page_info")
+    scroll.cursor = page_info["end_cursor"]
+    scroll.has_next = page_info["has_next_page"]
+
+
+def _profile_status(side: JSON) -> str | None:
+    """The status text at the top of a profile's intro: a Page's description."""
+    for view in side["profile_tile_views"]["nodes"]:
+        renderer: JSON = view.get("view_style_renderer") or {}
+        tile_view: JSON = renderer.get("view") or {}
+        tile_items: JSON = tile_view.get("profile_tile_items") or {}
+        items: list[JSON] = tile_items.get("nodes") or []
+        for item in items:
+            node: JSON = item.get("node") or {}
+            status: JSON = node.get("profile_status_text") or {}
+            if text := status.get("text"):
+                return str(text)
+    return None
 
 
 def _profile_header(api: Api, username: str) -> Feed:
@@ -328,14 +356,14 @@ def get_profile_events(
 
 
 def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
-    """Fetch and parse everything above the posts; also return the first feed query for page 1."""
+    """Fetch and parse everything above the posts; also return the first timeline page for page 1."""
     header_query: list[JSON]
     side_query: list[JSON]
     posts_query: list[JSON]
     try:
         header_query = api.ProfileCometHeaderQuery(user_id)
         side_query = api.ProfilePlusCometLoggedOutRootQuery(user_id)
-        posts_query = api.ProfileCometTimelineFeedQuery(user_id)
+        posts_query = api.ProfileCometTimelineFeedRefetchQuery(user_id, None)
     except ResponseError as e:
         if e.code != API_ERROR_CODES["rate_limit"]:
             raise
@@ -363,8 +391,9 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
 
     tabs: JSON = header.get("profile_tabs") or {}
     profile_user: JSON = tabs.get("profile_user") or {}
-    posts_user: JSON = posts_feed[0]["data"]["user"]
-    delegate_page: JSON | None = profile_user.get("delegate_page") or posts_user.get("delegate_page")
+    posts_data: JSON = posts_feed[0]["data"]
+    posts_user: JSON = posts_data.get("node") or posts_data.get("user") or {}
+    delegate_page: JSON | None = profile_user.get("delegate_page") or header.get("delegate_page") or posts_user.get("delegate_page")
     if delegate_page:
         feed.page_id = delegate_page.get("id")
 
@@ -391,8 +420,11 @@ def _fetch_profile_header(api: Api, user_id: str) -> tuple[Feed, list[JSON]]:
             elif "likes" in i["text"]["text"]:
                 feed.likes = i["text"]["text"].split(" ", 1)[0]
 
-    if (i := posts_feed[0]["data"]["user"]["delegate_page"]) and (description := i["best_description"]):
-        feed.description = description["text"]
+    # A Page's description is the status text of its intro (the page HTML also carries it elsewhere).
+    fallback_page: JSON = posts_user.get("delegate_page") or {}
+    best_description: JSON = fallback_page.get("best_description") or {}
+    if description := _profile_status(side) or best_description.get("text"):
+        feed.description = description
 
     if side["profile_tile_section_type"] == "INTRO":
         for i in side["profile_tile_views"]["nodes"][1]["view_style_renderer"]["view"]["profile_tile_items"]["nodes"]:

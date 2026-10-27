@@ -20,13 +20,14 @@ Exit codes: 0 up to date or updated, 1 changes found (--check only), 2 some quer
 import argparse
 import hashlib
 import json
+import logging
 import re
 import sys
 import time
 from collections.abc import Iterator
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, override
 
 import httpx
 import orjson
@@ -50,7 +51,6 @@ QUERY_NAMES: list[str] = [
     "GroupsCometDiscussionLayoutRootQuery",
     "GroupsCometFeedRegularStoriesPaginationQuery",
     "ProfileCometHeaderQuery",
-    "ProfileCometTimelineFeedQuery",
     "ProfileCometTimelineFeedRefetchQuery",
     "ProfilePlusCometLoggedOutRootQuery",
     "SearchCometResultsPaginatedResultsQuery",
@@ -209,6 +209,19 @@ def describe(label: str, result: object) -> tuple[str, bool]:
     return f"{count} items{' (rate limited)' if scroll.rate_limited else ''}", bool(count)
 
 
+class HtmlFallbacks(logging.Handler):
+    """Records the page HTML fallbacks a check needed: the queries behind them aren't working."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.routes: list[str] = []
+
+    @override
+    def emit(self, record: logging.LogRecord) -> None:
+        if (message := record.getMessage()).startswith("facebook: html /"):
+            self.routes.append(message.removeprefix("facebook: html ").removesuffix(" (rate-limit fallback)"))
+
+
 def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
     """Run a few real queries with the candidate data; return what failed."""
     saved: tuple[dict[str, int], dict[str, Value]] = (dict(api.DOC_IDS), dict(api.EXTRA_VARIABLES))
@@ -217,6 +230,8 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
     api.EXTRA_VARIABLES.clear()
     api.EXTRA_VARIABLES.update(providers)
     failures: list[str] = []
+    fallbacks: HtmlFallbacks = HtmlFallbacks()
+    logging.getLogger("phice").addHandler(fallbacks)
     try:
         for label, fn, args in (
             ("profile", extractor.get_profile, ("facebook",)),
@@ -231,15 +246,19 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
         ):
             for cache in (extractor.HEADERS, extractor.PAGES):
                 cache.clear()
+            fallbacks.routes.clear()
             try:
                 summary, ok = describe(label, fn(*args))
             except Exception as e:
                 summary, ok = f"FAILED ({e})", False
+            if ok and fallbacks.routes:
+                summary, ok = f"{summary}, but only through the page HTML ({', '.join(fallbacks.routes)})", False
             print(f"  check {label}: {summary}", file=sys.stderr)
             if not ok:
                 failures.append(f"{label}: {summary}")
             time.sleep(PAUSE)
     finally:
+        logging.getLogger("phice").removeHandler(fallbacks)
         api.DOC_IDS.clear()
         api.DOC_IDS.update(saved[0])
         api.EXTRA_VARIABLES.clear()
