@@ -44,7 +44,7 @@ SEARCH_TYPES: defaultdict[str, tuple[str, list[str]]] = defaultdict(
         "people": ("PEOPLE_TAB", []),
     },
 )
-PROFILE_PAGING: int = 3
+PROFILE_PAGING: int = 1  # timeline pages per page: Facebook gives logged-out visitors 3 posts per page
 COMMENT_PAGING: int = 2
 GROUP_PAGING: int = 4
 ALBUM_PAGING: int = 3
@@ -188,15 +188,26 @@ def _profile_status(side: JSON) -> str | None:
     return None
 
 
-def _profile_header(api: Api, user_id: str, section: Callable[[], JSON | None] | None = None) -> tuple[Feed, JSON | None]:
-    """A profile's header for its tabs, from the Posts tab cache when possible.
+def _profile_header(
+    api: Api, user_id: str, section: Callable[[], JSON | None] | None = None, *, needs_page_id: bool = False
+) -> tuple[Feed, JSON | None]:
+    """A profile's header for its tabs, from the cache when possible.
 
+    Tabs fetch it without the first page of the timeline, which only the Posts tab shows. That page is
+    where some Pages give their id and description, so a header built without it is cached apart, and a
+    tab that needs the Page id (`needs_page_id`) fetches the whole header when that one lacks it.
     A tab that also needs its section passes the request for it, which goes out with the header's.
     """
-    if (cached_header := HEADERS.get(("profile", user_id))) is not MISS:
-        return replace(cast("Feed", cached_header), posts=[], media=[], events=[], lists=[]), section() if section else None
-    feed, _, section_data = _fetch_profile_header(api, user_id, section)
-    HEADERS.set(("profile", user_id), replace(feed, posts=[], media=[], events=[], lists=[]), HEADER_TTL)
+    cached: object = HEADERS.get(("profile", user_id))
+    if cached is MISS:
+        cached = HEADERS.get(("profile_tab", user_id))
+        if cached is not MISS and needs_page_id and not cast("Feed", cached).page_id:
+            cached = MISS
+    if cached is not MISS:
+        return replace(cast("Feed", cached), posts=[], media=[], events=[], lists=[]), section() if section else None
+    feed, _, section_data = _fetch_profile_header(api, user_id, section, with_timeline=needs_page_id)
+    key: str = "profile" if needs_page_id else "profile_tab"
+    HEADERS.set((key, user_id), replace(feed, posts=[], media=[], events=[], lists=[]), HEADER_TTL)
     return feed, section_data
 
 
@@ -309,7 +320,7 @@ def get_profile_videos(username: str, cursor: str | None = None, *, proxy: str |
 
     scroll: Scroll = Scroll(cursor)
     with Api(proxy=proxy) as api:
-        feed, _ = _profile_header(api, _user_id(api, username))
+        feed, _ = _profile_header(api, _user_id(api, username), needs_page_id=True)
         if not feed.page_id:
             # Only Pages have a videos tab Facebook shows logged-out visitors.
             return _cache_page(page_key, (feed, Scroll(None)), scroll)
@@ -406,8 +417,8 @@ def get_profile_events(
 
 
 def _fetch_profile_header(
-    api: Api, user_id: str, extra: Callable[[], JSON | None] | None = None
-) -> tuple[Feed, list[JSON], JSON | None]:
+    api: Api, user_id: str, extra: Callable[[], JSON | None] | None = None, *, with_timeline: bool = True
+) -> tuple[Feed, list[JSON] | None, JSON | None]:
     """Fetch and parse everything above the posts; also return the first timeline page for page 1.
 
     Its queries, and the extra one a tab may pass, don't depend on each other, so they go out at once,
@@ -415,17 +426,19 @@ def _fetch_profile_header(
     """
     header_query: list[JSON]
     side_query: list[JSON]
-    posts_query: list[JSON]
+    posts_query: list[JSON] | None = None
     extra_data: JSON | None = None
     with ThreadPoolExecutor(max_workers=4) as pool:
         extra_future: Future[JSON | None] | None = pool.submit(extra) if extra else None
         header_future: Future[list[JSON]] = pool.submit(api.ProfileCometHeaderQuery, user_id)
         side_future: Future[list[JSON]] = pool.submit(api.ProfilePlusCometLoggedOutRootQuery, user_id)
-        posts_future: Future[list[JSON]] = pool.submit(api.ProfileCometTimelineFeedRefetchQuery, user_id, None)
+        posts_future: Future[list[JSON]] | None = (
+            pool.submit(api.ProfileCometTimelineFeedRefetchQuery, user_id, None) if with_timeline else None
+        )
         try:
             header_query = header_future.result()
             side_query = side_future.result()
-            posts_query = posts_future.result()
+            posts_query = posts_future.result() if posts_future is not None else None
         except ResponseError as e:
             if e.code != API_ERROR_CODES["rate_limit"]:
                 raise
@@ -441,7 +454,7 @@ def _fetch_profile_header(
 
     header: JSON = header_query[0]["data"]["user"]["profile_header_renderer"]["user"]
     side: JSON = side_query[-1]["data"]["profile_tile_sections"]["edges"][0]["node"]
-    posts_feed: list[JSON] = posts_query
+    posts_feed: list[JSON] | None = posts_query
 
     feed = Feed(
         id=user_id,
@@ -455,7 +468,7 @@ def _fetch_profile_header(
 
     tabs: JSON = header.get("profile_tabs") or {}
     profile_user: JSON = tabs.get("profile_user") or {}
-    posts_data: JSON = posts_feed[0]["data"]
+    posts_data: JSON = posts_feed[0]["data"] if posts_feed else {}
     posts_user: JSON = posts_data.get("node") or posts_data.get("user") or {}
     delegate_page: JSON | None = profile_user.get("delegate_page") or header.get("delegate_page") or posts_user.get("delegate_page")
     if delegate_page:
