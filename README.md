@@ -84,6 +84,7 @@ What Facebook keeps for logged-in users is not available: see [Won't fix](#wont-
 - Hashtag pages ([#19](https://github.com/darlopvil/phice-fork/issues/19)): Facebook gives logged-out visitors a single post and answers every request for more with a rate limit.
 - Logging in with a Facebook account: Phice stays anonymous, so replies and anything else Facebook keeps for logged-in users can't be shown. Phice says so instead of showing an empty thread.
 - Marketplace and Stories: they need an account.
+- A disk cache ([#24](https://github.com/darlopvil/phice-fork/issues/24)): pages already seen are served from memory in a few milliseconds, so a disk would only keep them across restarts, and Facebook's image links expire after a few days.
 
 ## Installation
 
