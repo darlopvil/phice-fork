@@ -65,12 +65,15 @@
     </article>
 {%- endmacro %}
 
-{% macro photo(node, cls="") -%}
+{% macro photo(node, cls="", sized=false) -%}
     <a {% if node.id %}href="{{ url_for('posts.photo', fbid=node.id) }}"{% endif %}>
         <img
             class="{{ cls }}"
             src="{{ node.url | proxy }}"
             alt="{{ node.alt_text }}"
+            {% if sized and node.width and node.height -%}
+                width="{{ node.width }}" height="{{ node.height }}"
+            {%- endif %}
         />
     </a>
 {%- endmacro %}
@@ -124,10 +127,10 @@
     </div>
 {%- endmacro %}
 
-{% macro attachment(node) -%}
+{% macro attachment(node, in_comment=false) -%}
     {%- set t = type(node) -%}
     {% if t == "Photo" -%}
-        {{ photo(node) }}
+        {{ photo(node, cls="comment_photo", sized=true) if in_comment else photo(node) }}
     {%- elif t == "Video" -%}
         {{ video(node) }}
     {%- elif t == "AttachmentAlbum" -%}
@@ -206,7 +209,7 @@
                 <div class="comment_text" dir="auto">{{ expandable(comment.text) }}</div>
             {%- endif %}
             {% if comment.attachment -%}
-                <div class="comment_attachment">{{ attachment(comment.attachment) }}</div>
+                <div class="comment_attachment">{{ attachment(comment.attachment, in_comment=true) }}</div>
             {%- endif %}
             <div class="comment_footer">
                 <span class="comment_time" title="{{ comment.time | format_time_full }}">{{ comment.time | format_time }}</span>

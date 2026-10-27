@@ -56,9 +56,11 @@ def parse_attachments(style: JSON) -> Attachment:
     match attachment_type:
         case "Photo" | "CoverPhoto" | "ProfileMedia" | "3DPhoto":
             photo_url: str
+            photo_image: JSON
             for k in ("viewer_image", "photo_image", "image", "placeholder_image"):
                 if "uri" in media.get(k, {}):
-                    photo_url = media[k]["uri"]
+                    photo_image = media[k]
+                    photo_url = photo_image["uri"]
                     break
             else:
                 raise ParsingError("Can't find the url for the photo")
@@ -71,17 +73,21 @@ def parse_attachments(style: JSON) -> Attachment:
                 url=photo_url,
                 owner_id=owner_id,
                 alt_text=media.get("accessibility_caption", ""),
+                width=photo_image.get("width"),
+                height=photo_image.get("height"),
             )
         case "UnifiedLightweightVideo" | "Video":
             return Video(
                 id=media["id"],
                 url=video_fields["browser_native_hd_url"] or video_fields["browser_native_sd_url"],
-                owner_id=media["owner"]["id"],
+                owner_id=(media.get("owner") or {}).get("id"),  # missing on videos in comments
                 thumbnail_url=media["preferred_thumbnail"]["image"]["uri"],
             )
         case "AnimatedImageShare":
             if not video_fields:
-                return Photo(url=media["animated_image"]["uri"])
+                # The GIF itself, at the size of the still Facebook shows in its place.
+                still: JSON = media.get("image") or media["animated_image"]
+                return Photo(url=media["animated_image"]["uri"], width=still.get("width"), height=still.get("height"))
             return AnimatedImage(url=video_fields["browser_native_hd_url"] or video_fields["browser_native_sd_url"])
         case "Album" | "AlbumFrame" | "AlbumColumn":
             subattachments: JSON = attachment.get("all_subattachments", attachment.get("five_photos_subattachments", {}))
@@ -145,6 +151,8 @@ def parse_attachments(style: JSON) -> Attachment:
             return Photo(
                 url=media["image"]["uri"],
                 alt_text=media["label"],
+                width=media["image"].get("width"),
+                height=media["image"].get("height"),
             )
         case "Fallback":
             match media["__typename"]:

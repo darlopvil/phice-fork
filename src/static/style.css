@@ -416,9 +416,18 @@ input[type="number"] {
     width: 50%;
     gap: 4px;
 }
-.comment_attachment > *,
-.comment_attachment > a > * {
+.comment_attachment > :not(a),
+.comment_attachment > .media_container,
+.comment_attachment > a > :not(.comment_photo) {
     width: 100%;
+}
+.comment_attachment > a {
+    max-width: 100%;
+}
+.comment_photo {
+    display: block;
+    max-width: 100%;
+    height: auto;
 }
 .comment_footer {
     display: flex;

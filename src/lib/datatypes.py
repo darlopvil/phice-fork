@@ -28,6 +28,8 @@ class Photo:
     id: str | None = None
     owner_id: str | None = None
     alt_text: str = ""
+    width: int | None = None  # the size Facebook shows it at, when known
+    height: int | None = None
 
 
 @dataclass(kw_only=True)
