@@ -21,6 +21,7 @@ from .parsers import (
     parse_event,
     parse_page_video,
     parse_post,
+    parse_profile_reel,
     parse_search,
 )
 from .utils import base64s, catch_rate_limit, network_name, unwrap_link, urlbasename
@@ -51,7 +52,7 @@ MEDIA_PAGE: int = 24  # photos per page of a profile tab
 VIDEOS_PAGE: int = 12  # videos per page: their thumbnails are full size
 EVENTS_PAGE: int = 12
 # Facebook's ids for the apps behind profile sections, as found in their section tokens.
-PROFILE_SECTION_APPS: dict[str, str] = {"photos": "2305272732", "events": "2344061033"}
+PROFILE_SECTION_APPS: dict[str, str] = {"photos": "2305272732", "events": "2344061033", "reels_tab": "168684841768375"}
 EXCLUDED_SHARE_HEADERS: list[str] = ["rdid", "share_url", "idorvanity"]
 
 # Everything fetched from Facebook is the same for every visitor, so it is cached
@@ -196,11 +197,11 @@ def _profile_header(api: Api, username: str) -> Feed:
     return feed
 
 
-def _profile_section(api: Api, feed: Feed, section: str) -> JSON | None:
+def _profile_section(api: Api, feed: Feed, section: str, *, first_part: bool = False) -> JSON | None:
     """The first page of a profile section, falling back to the page HTML when rate-limited."""
     token: str = base64s(f"app_section:{feed.id}:{PROFILE_SECTION_APPS[section]}")
     try:
-        response: list[JSON] = api.ProfileCometTopAppSectionQuery(feed.id, token)
+        response: list[JSON] = api.ProfileCometTopAppSectionQuery(feed.id, token, first_part=first_part)
     except ResponseError as e:
         if e.code != API_ERROR_CODES["rate_limit"]:
             raise
@@ -250,6 +251,41 @@ def get_profile_photos(username: str, cursor: str | None = None, *, proxy: str |
                     )[0]["data"]["node"]["pageItems"],
                     scroll,
                 )
+
+    return _cache_page(page_key, (feed, scroll), scroll)
+
+
+def _add_reels(feed: Feed, connection: JSON, scroll: Scroll) -> None:
+    feed.media.extend(r for i in connection["edges"] if (r := parse_profile_reel(i)))
+    scroll.cursor = connection["page_info"]["end_cursor"]
+    scroll.has_next = connection["page_info"]["has_next_page"]
+
+
+@_guard
+def get_profile_reels(username: str, cursor: str | None = None, *, proxy: str | None = None) -> tuple[Feed, Scroll]:
+    page_key: tuple[str | None, ...] = ("profile_reels", username, cursor)
+    if (hit := PAGES.get(page_key)) is not MISS:
+        return cast("tuple[Feed, Scroll]", hit)
+
+    scroll: Scroll = Scroll(cursor)
+    with Api(proxy=proxy) as api:
+        feed: Feed = _profile_header(api, username)
+        collection_id: object = ROUTES.get(("reels", feed.id))
+        if collection_id is MISS or not cursor:
+            # The section comes with the first ten reels; later pages only need its collection id.
+            section: JSON = _profile_section(api, feed, "reels_tab", first_part=True) or {}
+            all_collections: JSON = section.get("all_collections") or {}
+            collections: list[JSON] = all_collections.get("nodes") or []
+            collection: JSON = collections[0]["style_renderer"]["collection"] if collections else {}
+            if not collection.get("aggregated_fb_shorts"):
+                return _cache_page(page_key, (feed, Scroll(None)), scroll)
+            collection_id = collection["id"]
+            ROUTES.set(("reels", feed.id), collection_id, ROUTE_TTL)
+            if not cursor:
+                _add_reels(feed, collection["aggregated_fb_shorts"], scroll)
+        if cursor:
+            response: list[JSON] = api.ProfileCometAppCollectionReelsRendererPaginationQuery(str(collection_id), cursor)
+            _add_reels(feed, response[0]["data"]["node"]["aggregated_fb_shorts"], scroll)
 
     return _cache_page(page_key, (feed, scroll), scroll)
 

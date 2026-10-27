@@ -40,16 +40,22 @@ class Api:
         headers: dict[str, str] | None = None,
         data: dict[str, str | int] | None = None,
         follow_redirects: bool = False,
+        first_part: bool = False,
     ) -> httpx.Response:
         try:
+            if first_part:
+                # Facebook streams the deferred parts of a response after the first one, one per line.
+                # When only the first is needed, stop reading there instead of downloading the rest.
+                with self.client.stream(method, url, headers=headers, data=data, follow_redirects=follow_redirects) as stream:
+                    return httpx.Response(stream.status_code, text=next(stream.iter_lines(), ""), request=stream.request)
             return self.client.request(method, url, headers=headers, data=data, follow_redirects=follow_redirects)
         except httpx.TimeoutException as e:
             raise NetworkError("Facebook took too long to respond.", timeout=True) from e
         except httpx.HTTPError as e:
             raise NetworkError("Couldn't reach Facebook.") from e
 
-    def fetch(self, name: str, variables: JSON) -> list[JSON]:
-        log.info("facebook: graphql %s", name)
+    def fetch(self, name: str, variables: JSON, *, first_part: bool = False) -> list[JSON]:
+        log.info("facebook: graphql %s%s", name, " (first part)" if first_part else "")
         response: httpx.Response = self._request(
             "POST",
             "/api/graphql/",
@@ -90,6 +96,7 @@ class Api:
                 "variables": orjson.dumps(variables | EXTRA_VARIABLES).decode(),
                 "doc_id": DOC_IDS[name],
             },
+            first_part=first_part,
         )
         if response.status_code != 200:
             raise ResponseError(f"Facebook returned {response.status_code}")
@@ -228,7 +235,7 @@ class Api:
             },
         )
 
-    def ProfileCometTopAppSectionQuery(self, user_id: str, section_token: str) -> list[JSON]:
+    def ProfileCometTopAppSectionQuery(self, user_id: str, section_token: str, *, first_part: bool = False) -> list[JSON]:
         return self.fetch(
             "ProfileCometTopAppSectionQuery",
             {
@@ -238,6 +245,21 @@ class Api:
                 "useDefaultActor": False,
                 "userID": user_id,
             },
+            first_part=first_part,
+        )
+
+    def ProfileCometAppCollectionReelsRendererPaginationQuery(self, collection_id: str, cursor: str | None) -> list[JSON]:
+        return self.fetch(
+            "ProfileCometAppCollectionReelsRendererPaginationQuery",
+            {
+                "count": 10,
+                "cursor": cursor,
+                "id": collection_id,
+                "renderLocation": None,
+                "scale": 1,
+                "useDefaultActor": False,
+            },
+            first_part=True,
         )
 
     def ProfileCometAppCollectionPhotosRendererPaginationQuery(
@@ -288,7 +310,7 @@ class Api:
         return self.fetch(
             "ProfileCometHeaderQuery",
             {
-                "scale": 1,
+                "scale": 2,
                 "selectedID": user_id,
                 "selectedSpaceType": "community",
                 "shouldUseFXIMProfilePicEditor": False,

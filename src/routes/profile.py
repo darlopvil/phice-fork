@@ -3,7 +3,7 @@ from flask.typing import ResponseReturnValue
 from werkzeug.utils import secure_filename
 
 from ..flask_utils import get_config
-from ..lib.extractor import get_profile, get_profile_events, get_profile_photos, get_profile_videos
+from ..lib.extractor import get_profile, get_profile_events, get_profile_photos, get_profile_reels, get_profile_videos
 
 bp: Blueprint = Blueprint("profile", __name__)
 
@@ -65,3 +65,11 @@ def events(username: str, list_slug: str | None = None) -> ResponseReturnValue:
         kind="events",
         current_list=list_slug or request.args.get("list") or (feed.lists[0][0] if feed.lists else None),
     )
+
+
+@bp.route("/<string:username>/reels_tab")  # Facebook's own path; the last rule below is the one links use
+@bp.route("/<string:username>/reels")
+def reels(username: str) -> ResponseReturnValue:
+    feed, scroll = get_profile_reels(username, request.args.get("cursor"), proxy=get_config().proxy)
+
+    return render_template("profile_media.html.jinja", feed=feed, scroll=scroll, title=f"{feed.name} · Reels", kind="reels")

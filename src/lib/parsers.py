@@ -365,6 +365,27 @@ def parse_page_video(node: JSON) -> Video:
     )
 
 
+def parse_profile_reel(edge: JSON) -> Video | None:
+    """A reel from a profile's Reels section; None for anything else."""
+    node: JSON = cast("JSON", _dig(edge, "profile_reel_node", "node") or {})
+    video: object = _dig(node, "short_form_video_context", "video")
+    if not isinstance(video, dict):
+        return None
+    video_data: JSON = cast("JSON", video)
+    owner: object = _dig(video_data, "owner", "id")
+    title: object = _dig(node, "message", "text")
+    duration: object = video_data.get("playable_duration_in_ms")
+    return Video(
+        id=video_data["id"],
+        url=None,
+        owner_id=owner if isinstance(owner, str) else None,
+        thumbnail_url=video_data.get("first_frame_thumbnail"),
+        title=title if isinstance(title, str) and title else None,
+        duration=duration // 1000 if isinstance(duration, int) else None,
+        reel=True,
+    )
+
+
 def parse_collection_event(item: JSON) -> EventPage | None:
     """An event card from a profile's events collection; None for anything else."""
     node: JSON = item["node"]

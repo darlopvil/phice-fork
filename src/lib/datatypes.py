@@ -38,6 +38,7 @@ class Video:
     thumbnail_url: str | None = None
     title: str | None = None
     duration: int | None = None  # seconds
+    reel: bool = False
 
 
 @dataclass(kw_only=True)

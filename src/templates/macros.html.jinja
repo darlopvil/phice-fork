@@ -38,7 +38,7 @@
                         <img src="{{ i.url | proxy }}" alt="{{ i.alt_text }}" />
                     </a>
                 {% else %}
-                    <a href="{{ url_for('posts.videos', author=i.owner_id, token=i.id) }}" {% if i.title %}title="{{ i.title }}"{% endif %}>
+                    <a href="{{ url_for('posts.reel', token=i.id) if i.reel else url_for('posts.videos', author=i.owner_id, token=i.id) }}" {% if i.title %}title="{{ i.title }}"{% endif %}>
                         <img src="{{ i.thumbnail_url | proxy }}" alt="{{ i.title or 'Video thumbnail' }}" />{{ icon("play") }}
                         {%- if i.duration %}<span class="media_duration">{{ i.duration | format_duration }}</span>{% endif %}
                     </a>

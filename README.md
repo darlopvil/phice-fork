@@ -29,7 +29,7 @@ Inspired by projects like [Nitter](https://github.com/zedeus/nitter), [Invidious
 
 Everything Facebook shows a logged-out visitor:
 
-- Profiles and Pages: their posts, intro (links are named after the network they lead to) and the Photos, Videos and Events tabs. Facebook only shows the videos of Pages.
+- Profiles and Pages: their posts, intro (links are named after the network they lead to) and the Reels, Photos, Videos and Events tabs. Facebook leaves reels out of the timeline it shows logged-out visitors, so they have their own tab. Facebook only shows the videos of Pages.
 - Posts, videos, reels and photos, with their comments and replies.
 - Public groups and their posts.
 - Albums and event pages.
@@ -41,7 +41,7 @@ Phice answers the same paths as facebook.com, so replacing the host of a Faceboo
 | Page | Paths |
 |---|---|
 | Profile | `/<profile>`, `/<profile>/timeline`, `/profile.php?id=<id>`, `/people/<name>/<id>`, `/p/<profile>` |
-| Profile tabs | `/<profile>/photos`, `/<profile>/videos`, `/<profile>/events`, `/<profile>/upcoming_hosted_events`, `/<profile>/past_hosted_events` |
+| Profile tabs | `/<profile>/reels`, `/<profile>/reels_tab`, `/<profile>/photos`, `/<profile>/videos`, `/<profile>/events`, `/<profile>/upcoming_hosted_events`, `/<profile>/past_hosted_events` |
 | Post | `/<author>/posts/<id>`, `/<author>/videos/<id>`, `/reel/<id>`, `/photo?fbid=<id>`, `/photo.php?fbid=<id>`, `/permalink.php?story_fbid=<id>`, `/story.php?story_fbid=<id>`, `/watch?v=<id>` |
 | Group | `/groups/<group>`, `/groups/<group>/posts/<id>`, `/groups/<group>/permalink/<id>` |
 | Other | `/media/set?set=<album>`, `/events/<id>`, `/search`, `/share/<...>` |
@@ -74,7 +74,7 @@ What Facebook keeps for logged-in users is not available: see [Won't fix](#wont-
 - A script that refreshes the query ids and checks the new data before writing it ([#11](https://github.com/darlopvil/phice-fork/issues/11)).
 - Linked accounts in profile intros named after their network ([#14](https://github.com/darlopvil/phice-fork/issues/14)).
 - Event pages ([#15](https://github.com/darlopvil/phice-fork/issues/15)).
-- Profile tabs: Photos ([#16](https://github.com/darlopvil/phice-fork/issues/16)), Videos ([#17](https://github.com/darlopvil/phice-fork/issues/17)) and Events ([#18](https://github.com/darlopvil/phice-fork/issues/18)).
+- Profile tabs: Reels ([#21](https://github.com/darlopvil/phice-fork/issues/21)), Photos ([#16](https://github.com/darlopvil/phice-fork/issues/16)), Videos ([#17](https://github.com/darlopvil/phice-fork/issues/17)) and Events ([#18](https://github.com/darlopvil/phice-fork/issues/18)).
 
 ### Won't fix
 
@@ -167,7 +167,7 @@ docker compose run --rm --build --no-deps --user "$(id -u):$(id -g)" \
 docker compose up -d --build
 ```
 
-The script loads a handful of public Facebook pages and their scripts (each script only once), so run it only when needed. Provider variables get the value Facebook's own provider modules return for a logged-out visitor, and none is ever removed, since queries that keep an older id may still need them. A query whose id can't be found keeps its current one. Before writing, the new data is checked with a few real queries (a profile, a post with comments, a photo post, a search, a group, an event and a profile's photos, videos and events), and nothing is written if any of them fails. Facebook serves a different set of scripts on each load, so a pass can miss some definitions: `--save-dump DIR` keeps what was downloaded and `--from-dump DIR` reads it back instead of contacting Facebook.
+The script loads a handful of public Facebook pages and their scripts (each script only once), so run it only when needed. Provider variables get the value Facebook's own provider modules return for a logged-out visitor, and none is ever removed, since queries that keep an older id may still need them. A query whose id can't be found keeps its current one. Before writing, the new data is checked with a few real queries (a profile, a post with comments, a photo post, a search, a group, an event and a profile's photos, videos, events and reels), and nothing is written if any of them fails. Facebook serves a different set of scripts on each load, so a pass can miss some definitions: `--save-dump DIR` keeps what was downloaded and `--from-dump DIR` reads it back instead of contacting Facebook.
 
 ## License
 

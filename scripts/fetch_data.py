@@ -11,7 +11,7 @@ instead of contacting Facebook, so a complete pass can be reused.
 
 Before writing, the new data is checked with a few real queries (a profile with its next page, a
 post with comments, a photo post with its full-size photo, a search, a group, an event and a profile's
-photos, videos and events); nothing is written unless they all work.
+photos, videos, events and reels); nothing is written unless they all work.
 
 Exit codes: 0 up to date or updated, 1 changes found (--check only), 2 some query ids not found
 (their current ids are kept), 3 the new data failed the check (nothing written).
@@ -61,6 +61,7 @@ QUERY_NAMES: list[str] = [
     "ProfileCometAppCollectionPhotosRendererPaginationQuery",
     "PagesCometChannelTabAllVideosCardImplPaginationQuery",
     "ProfileCometAppCollectionEventsRendererPaginationQuery",
+    "ProfileCometAppCollectionReelsRendererPaginationQuery",
 ]
 # Pages whose scripts define the queries above.
 URLS: list[str] = [
@@ -75,6 +76,7 @@ URLS: list[str] = [
     "https://www.facebook.com/facebook/photos",
     "https://www.facebook.com/facebook/videos",
     "https://www.facebook.com/public.gr/events",
+    "https://www.facebook.com/facebook/reels_tab",
 ]
 # Preloaded scripts, plus the ones the page loads directly.
 SCRIPT_RES: tuple[re.Pattern[str], ...] = (
@@ -243,6 +245,7 @@ def verify(doc_ids: dict[str, int], providers: dict[str, Value]) -> list[str]:
             ("profile photos", extractor.get_profile_photos, ("facebook",)),
             ("profile videos", extractor.get_profile_videos, ("facebook",)),
             ("profile events", extractor.get_profile_events, ("public.gr",)),
+            ("profile reels", extractor.get_profile_reels, ("facebook",)),
         ):
             for cache in (extractor.HEADERS, extractor.PAGES):
                 cache.clear()

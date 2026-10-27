@@ -58,7 +58,7 @@
         <section id="timeline_feed">
             {% if not feed.is_group -%}
                 <nav class="profile_tabs">
-                    {% for endpoint, label in (("profile.profile", "Posts"), ("profile.photos", "Photos"), ("profile.videos", "Videos"), ("profile.events", "Events")) -%}
+                    {% for endpoint, label in (("profile.profile", "Posts"), ("profile.reels", "Reels"), ("profile.photos", "Photos"), ("profile.videos", "Videos"), ("profile.events", "Events")) -%}
                         <a href="{{ url_for(endpoint, username=feed.token) }}"><span
                             class="profile_tab{{ ' active' if request.endpoint == endpoint or (endpoint == 'profile.profile' and request.endpoint == 'profile.profile_php') }}"
                         >{{ label }}</span></a>
@@ -66,6 +66,10 @@
                 </nav>
             {%- endif %}
             {% block feed %}
+            {% if not feed.is_group and not feed.is_private and not request.args.get("cursor") -%}
+                <span class="message_card">Facebook leaves reels out of this timeline for logged-out visitors: they are in the
+                    <a href="{{ url_for('profile.reels', username=feed.token) }}"><span class="message_link">Reels</span></a> tab.</span>
+            {%- endif %}
             {% if feed.is_private %}
                 <span class="card centered">{{ icon("lock") }} The content is private.</span>
             {% elif feed.posts %}
