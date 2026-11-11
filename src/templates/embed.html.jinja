@@ -1,0 +1,33 @@
+{%- from "macros.html.jinja" import attachment, Post -%}
+
+<!DOCTYPE html>
+{%- set dark = request.args.get("theme") == "dark" %}
+<html lang="en" class="embed{{ "" if dark else " light" }}">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{{ title + " | " if title }}Phice</title>
+        {#- Every link opens in the page that embeds this one, not inside the frame. #}
+        <base target="_top" />
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+        {#- Light by default, like Facebook's embeds and most pages that carry them; ?theme=dark gives Phice's own. #}
+        {% if not dark -%}
+            <link rel="stylesheet" href="{{ url_for('static', filename='themes/light.css') }}" />
+        {%- endif %}
+        <link rel="stylesheet" href="{{ url_for('static', filename='embed.css') }}" />
+    </head>
+    <body class="embed">
+        {% if post is defined -%}
+            {% if media_only -%}
+                <div class="post_attachment embed_media">{{ attachment(post.attachment) }}</div>
+            {%- else -%}
+                {{ Post(post) }}
+            {%- endif %}
+        {%- else -%}
+            <div class="card embed_error">
+                <span>{{ message or "This post can't be shown." }}</span>
+                {% if href -%}<a href="{{ href }}"><span class="embed_link">Open it on Facebook</span></a>{%- endif %}
+            </div>
+        {%- endif %}
+    </body>
+</html>

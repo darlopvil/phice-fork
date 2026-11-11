@@ -35,6 +35,7 @@ Everything Facebook shows a logged-out visitor:
 - Albums and event pages.
 - Search (pages, posts, recent posts and people).
 - `/share/` links, resolved to the page they point to.
+- Embeds: Facebook's plugin paths, `/plugins/post.php` and `/plugins/video.php`, take the same `href` and show the post in a compact page for iframes, light by default (`?theme=dark` for the dark one). As on Facebook, a video comes alone unless `show_text` is set. Replacing the host of a Facebook embed iframe is enough.
 
 Phice answers the same paths as facebook.com, so replacing the host of a Facebook link is enough:
 
@@ -44,6 +45,7 @@ Phice answers the same paths as facebook.com, so replacing the host of a Faceboo
 | Profile tabs | `/<profile>/reels`, `/<profile>/reels_tab`, `/<profile>/photos`, `/<profile>/videos`, `/<profile>/events`, `/<profile>/upcoming_hosted_events`, `/<profile>/past_hosted_events` |
 | Post | `/<author>/posts/<id>`, `/<author>/videos/<id>`, `/reel/<id>`, `/photo?fbid=<id>`, `/photo.php?fbid=<id>`, `/permalink.php?story_fbid=<id>`, `/story.php?story_fbid=<id>`, `/watch?v=<id>` |
 | Group | `/groups/<group>`, `/groups/<group>/posts/<id>`, `/groups/<group>/permalink/<id>` |
+| Embed | `/plugins/post.php?href=<post URL>`, `/plugins/video.php?href=<video URL>` |
 | Other | `/media/set?set=<album>`, `/events/<id>`, `/search`, `/share/<...>` |
 
 What Facebook keeps for logged-in users is not available: see [Won't fix](#wont-fix).
@@ -77,6 +79,7 @@ What Facebook keeps for logged-in users is not available: see [Won't fix](#wont-
 - A script that refreshes the query ids and checks the new data before writing it ([#11](https://github.com/darlopvil/phice-fork/issues/11)).
 - Linked accounts in profile intros named after their network ([#14](https://github.com/darlopvil/phice-fork/issues/14)).
 - Event pages ([#15](https://github.com/darlopvil/phice-fork/issues/15)).
+- Embeddable posts and videos on Facebook's own plugin paths, for iframes ([#27](https://github.com/darlopvil/phice-fork/issues/27)).
 - Profile tabs: Reels ([#21](https://github.com/darlopvil/phice-fork/issues/21)), Photos ([#16](https://github.com/darlopvil/phice-fork/issues/16)), Videos ([#17](https://github.com/darlopvil/phice-fork/issues/17)) and Events ([#18](https://github.com/darlopvil/phice-fork/issues/18)).
 
 ### Won't fix

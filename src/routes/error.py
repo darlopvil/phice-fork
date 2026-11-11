@@ -2,13 +2,14 @@ import logging
 from pathlib import Path
 from traceback import format_exception
 
-from flask import Blueprint, current_app, render_template
+from flask import Blueprint, current_app, render_template, request
 from flask.typing import ResponseReturnValue
 from werkzeug.exceptions import HTTPException, InternalServerError
 
 from ..flask_utils import get_config
 from ..lib.api import API_ERROR_CODES
 from ..lib.exceptions import NetworkError, NotFoundError, ParsingError, ResponseError
+from .embed import is_facebook_url
 
 bp: Blueprint = Blueprint("error_handlers", __name__)
 
@@ -53,6 +54,10 @@ def error_handler(e: HTTPException | NotFoundError | ResponseError | ParsingErro
             if isinstance(e, InternalServerError) and (og := e.original_exception) is not None and get_config().show_tracebacks:
                 tb = "".join(format_exception(og)).replace(f"{Path(current_app.root_path).parent}/", "")
 
+    if request.blueprint == "embed":
+        # Inside an iframe: a short notice instead of a whole page with Phice's header.
+        href: str = request.args.get("href", "")
+        return render_template("embed.html.jinja", message=message, href=href if is_facebook_url(href) else None), status_code
     return render_template(
         "error.html.jinja",
         title=f"Error {status_code}",

@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 from flask import Blueprint, abort, render_template, request
 from flask.typing import ResponseReturnValue
 
@@ -5,6 +7,19 @@ from ..flask_utils import get_config, get_user_settings
 from ..lib.extractor import get_post
 
 bp: Blueprint = Blueprint("posts", __name__)
+
+
+def post_token(endpoint: str | None, token: str | None, args: Mapping[str, str]) -> str | None:
+    """The post id or token a post route points to: in the path, or in the query for Facebook's .php routes."""
+    match endpoint:
+        case "posts.photo":
+            return args.get("fbid")
+        case "posts.permalink" | "posts.story":
+            return args.get("story_fbid")
+        case "posts.watch":
+            return args.get("v")
+        case _:
+            return token
 
 
 @bp.route("/<string:author>/posts/<string:_>/<string:token>", endpoint="posts")
@@ -20,16 +35,7 @@ bp: Blueprint = Blueprint("posts", __name__)
 @bp.route("/story.php", endpoint="story")
 @bp.route("/watch", endpoint="watch")
 def posts(author: str | None = None, token: str | None = None, _: str | None = None) -> ResponseReturnValue:  # pyright: ignore[reportUnusedParameter] # noqa: ARG001
-    post_id: str | None = None
-    match request.endpoint:
-        case "posts.photo":
-            post_id = request.args.get("fbid")
-        case "posts.permalink" | "posts.story":
-            post_id = request.args.get("story_fbid")
-        case "posts.watch":
-            post_id = request.args.get("v")
-        case _:
-            post_id = token
+    post_id: str | None = post_token(request.endpoint, token, request.args)
     if not post_id:
         abort(400)
 
